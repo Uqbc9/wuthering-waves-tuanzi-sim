@@ -1,0 +1,399 @@
+{
+  "metadata": {
+    "title": "鸣潮「小团快跑・锦标赛」2026 模拟配置",
+    "updated_at": "2026-05-09",
+    "data_status": "2026 公开网页仅确认活动框架；A组名单、技能、赛道来自用户补充；未公开细则沿用 2025 小团快跑公开赛制并作可调模拟假设。",
+    "sources": [
+      {
+        "label": "游民星空 2025 小团快跑官方玩法镜像",
+        "url": "https://www.gamersky.com/handbook/202505/1926056.shtml",
+        "note": "确认 2025 活动时间、分组淘汰、每日比赛、应援和结算框架。"
+      },
+      {
+        "label": "GameKee 2025 小团快跑活动页",
+        "url": "https://www.gamekee.com/mc/661145.html",
+        "note": "确认 2025 周年庆典应援活动说明。"
+      },
+      {
+        "label": "17173 2026 3.3 活动汇总",
+        "url": "https://news.17173.com/content/04252026/003046809.shtml",
+        "note": "确认 2026 小团快跑回归、参赛选手扩大到 18 位。"
+      },
+      {
+        "label": "OurPlay 2026 3.3 版本新闻",
+        "url": "https://www.ourplay.net/news/detail/10349",
+        "note": "确认 3.3 版本上线与绯雪、达妮娅等新内容。"
+      }
+    ]
+  },
+  "assumptions": {
+    "dice_sides": [1, 2, 3],
+    "track_length": 32,
+    "round_action_order": "random_each_round",
+    "first_roll_decides_action_order_only": false,
+    "higher_first_roll_acts_earlier": false,
+    "stack_order": "bottom_to_top",
+    "same_tile_rank": "top_first",
+    "carry_racers_stacked_above": true,
+    "carry_disabled_on_start_and_finish": true,
+    "landing_stack_placement": "moving_stack_goes_on_top",
+    "rift_randomizes_stack_on_tile": true,
+    "mechanism_chain_limit": 8,
+    "siglica_marks_only_unfinished_racers": true,
+    "siglica_mark_expires_at_round_end": true,
+    "hiyuki_meets_budawang_on_same_tile_after_movement": true,
+    "budawang_starts_on_round": 3,
+    "budawang_acts_after_all_racers": false,
+    "budawang_direction": -1,
+    "budawang_stack_position": "bottom",
+    "budawang_carries_stacked_racers": true,
+    "budawang_captures_passed_racers": true,
+    "budawang_teleports_before_move_when_behind_all_racers": false,
+    "budawang_teleports_to_finish_after_passing_last_racer": false,
+    "budawang_teleports_to_finish_at_round_end_when_apart": true,
+    "start_and_finish_share_tile": true,
+    "aggregate_rank_points": [6, 5, 4, 3, 2, 1],
+    "aggregate_tie_breakers": ["best_single_rank", "rank_sum", "random"]
+  },
+  "track": {
+    "sequence": [
+      "起点/终点",
+      1,
+      2,
+      "a",
+      4,
+      5,
+      "c",
+      7,
+      8,
+      9,
+      "b",
+      "a",
+      12,
+      13,
+      14,
+      15,
+      "a",
+      17,
+      18,
+      19,
+      "c",
+      21,
+      22,
+      "a",
+      24,
+      25,
+      26,
+      27,
+      "b",
+      29,
+      30,
+      31,
+      "起点/终点"
+    ],
+    "mechanisms": {
+      "a": {
+        "id": "boost",
+        "name": "推进装置",
+        "delta": 1
+      },
+      "b": {
+        "id": "hindrance",
+        "name": "阻遏装置",
+        "delta": -1
+      },
+      "c": {
+        "id": "rift",
+        "name": "时空裂隙"
+      }
+    }
+  },
+  "racers": [
+    {
+      "id": "lu_hesi",
+      "name": "陆·赫斯",
+      "group": "A",
+      "skill": {
+        "name": "来颗糖吧",
+        "description": "当触发推进装置时，可额外前进3格。但触发阻遏装置时，将额外后退1格。",
+        "type": "tile_affinity",
+        "boost_extra_steps": 3,
+        "hindrance_extra_steps": -1
+      }
+    },
+    {
+      "id": "siglica",
+      "name": "西格莉卡",
+      "group": "A",
+      "skill": {
+        "name": "日灵，帮帮忙！",
+        "description": "每轮投骰子后，标记排名紧邻自身且更高的至多两个团子。被标记团子在本回合中少前进1格，但移动距离不会降到0或更少。",
+        "type": "mark_higher_neighbors_round_start",
+        "count": 2,
+        "step_delta": -1,
+        "minimum_move": 1
+      }
+    },
+    {
+      "id": "denia",
+      "name": "达妮娅",
+      "group": "A",
+      "skill": {
+        "name": "好事成“双”",
+        "description": "投骰子时，若投出和上一次相同的点数，则额外前进2格。",
+        "type": "same_roll_bonus",
+        "bonus_steps": 2,
+        "initial_order_roll_counts": false
+      }
+    },
+    {
+      "id": "hiyuki",
+      "name": "绯雪",
+      "group": "A",
+      "skill": {
+        "name": "引路白鸟",
+        "description": "当该团子与布大王相遇后，之后每次移动时都将额外前进1格。",
+        "type": "after_meeting_budawang_bonus",
+        "bonus_steps": 1
+      }
+    },
+    {
+      "id": "cartethyia",
+      "name": "卡提希娅",
+      "group": "A",
+      "skill": {
+        "name": "翻盘桥段",
+        "description": "每场比赛最多触发1次。自身移动结束后，若处于最后一名，本场比赛剩余回合都会有60%概率额外前进2格。",
+        "type": "last_place_comeback",
+        "trigger_once": true,
+        "future_bonus_probability": 0.6,
+        "bonus_steps": 2
+      }
+    },
+    {
+      "id": "phoebe",
+      "name": "菲比",
+      "group": "A",
+      "skill": {
+        "name": "岁主庇佑",
+        "description": "50%概率额外前进1格。",
+        "type": "per_move_chance_bonus",
+        "probability": 0.5,
+        "bonus_steps": 1
+      }
+    },
+    {
+      "id": "chisaki",
+      "name": "千咲",
+      "group": "B",
+      "skill": {
+        "name": "视阈解眀",
+        "description": "投骰子时，若投出的结果为本轮所有点数最小之一，则额外前进2格。",
+        "type": "round_min_roll_bonus",
+        "bonus_steps": 2
+      }
+    },
+    {
+      "id": "morning",
+      "name": "莫宁",
+      "group": "B",
+      "skill": {
+        "name": "精密演算",
+        "description": "投骰子时，点数将固定在3/2/1循环出现。",
+        "type": "fixed_roll_cycle",
+        "sequence": [3, 2, 1]
+      }
+    },
+    {
+      "id": "linnae",
+      "name": "琳奈",
+      "group": "B",
+      "skill": {
+        "name": "炫彩时刻！",
+        "description": "每回合中，有60%概率按照双倍点数移动，但有20%概率当回合无法移动。",
+        "type": "chance_double_or_skip",
+        "double_probability": 0.6,
+        "skip_probability": 0.2
+      }
+    },
+    {
+      "id": "aemis",
+      "name": "爱弥斯",
+      "group": "B",
+      "skill": {
+        "name": "电子幽灵登场",
+        "description": "每场比赛一次，当该团子经过赛程中点后，若前方存在其他非布大王的团子，则会传送到最近团子顶端。",
+        "type": "midpoint_nearest_ahead_teleport_once",
+        "trigger_once": true
+      }
+    },
+    {
+      "id": "shorekeeper",
+      "name": "守岸人",
+      "group": "B",
+      "skill": {
+        "name": "收束的未来",
+        "description": "骰子只会掷出2或3。",
+        "type": "restricted_roll",
+        "sides": [2, 3]
+      }
+    },
+    {
+      "id": "carllotta",
+      "name": "珂莱塔",
+      "group": "B",
+      "skill": {
+        "name": "利润加倍",
+        "description": "28%概率以骰子的双倍点数前进。",
+        "type": "chance_double_roll",
+        "probability": 0.28
+      }
+    },
+    {
+      "id": "augusta",
+      "name": "奥古斯塔",
+      "group": "C",
+      "skill": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "younuo",
+      "name": "尤诺",
+      "group": "C",
+      "skill": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "florof",
+      "name": "弗洛洛",
+      "group": "C",
+      "skill": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "changli",
+      "name": "长离",
+      "group": "C",
+      "skill": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "jinhsi",
+      "name": "今汐",
+      "group": "C",
+      "skill": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "calcharo",
+      "name": "卡卡罗",
+      "group": "C",
+      "skill": {
+        "type": "none"
+      }
+    }
+  ],
+  "special_units": {
+    "budawang": {
+      "id": "__budawang__",
+      "name": "布大王团子",
+      "dice_sides": [1, 2, 3, 4, 5, 6],
+      "starts_on_round": 3,
+      "start_position": 32,
+      "direction": -1,
+      "acts_after_racers": true
+    }
+  },
+  "matches": [
+    {
+      "id": "a_group_upper",
+      "name": "A组小组赛 05.09 上半场",
+      "type": "single_race",
+      "date": "05.09",
+      "group": "A",
+      "racers": ["lu_hesi", "siglica", "denia", "hiyuki", "cartethyia", "phoebe"]
+    },
+    {
+      "id": "a_group_lower",
+      "name": "A组小组赛 05.10 下半场",
+      "type": "single_race",
+      "date": "05.10",
+      "group": "A",
+      "racers": ["lu_hesi", "siglica", "denia", "hiyuki", "cartethyia", "phoebe"]
+    },
+    {
+      "id": "a_group_lower_from_0509_settlement",
+      "name": "A组小组赛 05.10 下半场（接 05.09 结算站位）",
+      "type": "single_race",
+      "date": "05.10",
+      "group": "A",
+      "racers": ["lu_hesi", "siglica", "denia", "hiyuki", "cartethyia", "phoebe"],
+      "initial_state": {
+        "label": "05.09上半场结算位置",
+        "finish_rule": "one_lap_after_next_finish",
+        "positions": {
+          "denia": 32,
+          "phoebe": 31,
+          "siglica": 31,
+          "hiyuki": 30,
+          "lu_hesi": 30,
+          "cartethyia": 29
+        },
+        "stacks": {
+          "32": ["denia"],
+          "31": ["siglica", "phoebe"],
+          "30": ["lu_hesi", "hiyuki"],
+          "29": ["cartethyia"]
+        },
+        "state_flags": {
+          "hiyuki_met_budawang": false,
+          "cartethyia_triggered": false,
+          "cartethyia_active": false
+        },
+        "note": "下半场从当前位置接续；每个团子需先到下一次0/32，再完整跑一圈回到0/32才完成。布大王下半场仍第3轮从0/32出场。stacks 使用代码内部的底->顶顺序；用户文本里同格前者按更靠上/更领先处理，因此配置内反向保存。"
+      }
+    },
+    {
+      "id": "a_group_combined",
+      "name": "A组小组赛汇总 6进4",
+      "type": "aggregate",
+      "sessions": ["a_group_upper", "a_group_lower"],
+      "qualify_top": 4
+    },
+    {
+      "id": "template_all_18",
+      "name": "18名团子模板赛",
+      "type": "single_race",
+      "racers": [
+        "lu_hesi",
+        "siglica",
+        "denia",
+        "hiyuki",
+        "cartethyia",
+        "phoebe",
+        "chisaki",
+        "morning",
+        "linnae",
+        "aemis",
+        "shorekeeper",
+        "carllotta",
+        "augusta",
+        "younuo",
+        "florof",
+        "changli",
+        "jinhsi",
+        "calcharo"
+      ]
+    }
+  ],
+  "payout": {
+    "enabled": false,
+    "multipliers": {},
+    "other_multiplier": 0.0
+  }
+}

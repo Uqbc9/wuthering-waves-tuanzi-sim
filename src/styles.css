@@ -232,6 +232,29 @@ h3 {
   overscroll-behavior: contain;
 }
 
+.position-guide {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid #d7ddd6;
+  border-radius: 8px;
+  background: #fbfcfa;
+  color: #46535b;
+  padding: 8px 10px;
+}
+
+.position-guide strong {
+  color: #22303a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.position-guide span {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .position-row {
   display: grid;
   grid-template-columns: minmax(76px, 1fr) 72px 68px;

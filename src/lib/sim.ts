@@ -257,7 +257,12 @@ export class Race {
       this.siglicaPenalties = {};
       this.budawangPendingRoundEndTeleport = false;
       const roundNotes: string[] = [];
-      const marked = this.applyRoundStartMarks();
+      const skipOpeningStartMarks =
+        this.isNeutralOpeningRound(roundNo) && this.hasActiveRoundStartMarkSkill();
+      const marked = skipOpeningStartMarks ? [] : this.applyRoundStartMarks();
+      if (skipOpeningStartMarks) {
+        roundNotes.push("首轮同在起点，暂无前后顺序，西格莉卡不标记");
+      }
       if (marked.length > 0) {
         roundNotes.push(`西格莉卡轮初标记 ${marked.map((id) => this.racers[id].name).join("、")}`);
       }
@@ -659,6 +664,24 @@ export class Race {
       );
     }
     return marked;
+  }
+
+  private isNeutralOpeningRound(roundNo: number): boolean {
+    if (roundNo !== 1 || this.lapFinishMode) {
+      return false;
+    }
+    const activeRacers = this.racerIds.filter((racerId) => !this.finishedSet.has(racerId));
+    return activeRacers.length > 1 && activeRacers.every((racerId) => this.positions[racerId] === 0);
+  }
+
+  private hasActiveRoundStartMarkSkill(): boolean {
+    return this.racerIds.some((racerId) => {
+      if (this.finishedSet.has(racerId)) {
+        return false;
+      }
+      const skill = this.racers[racerId].skill;
+      return ROUND_START_MARK_SKILLS.has(String(skill.type ?? "none"));
+    });
   }
 
   private applySiglicaMarks(racerId: string, count: number, stepDelta: number): string[] {

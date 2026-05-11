@@ -141,6 +141,50 @@ describe("browser simulator", () => {
     expect(turn?.notes).toContain("本轮最低点 +2");
   });
 
+  it("does not let Siglica mark racers before anyone has moved from the start", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [2];
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["lu_hesi", "siglica"],
+        positions: { lu_hesi: 0, siglica: 0 },
+        stack_order: ["lu_hesi", "siglica"],
+      },
+      20260510,
+    );
+    const roundOrder = trace.timeline.find(
+      (step) => step.event_type === "round_order" && step.round_no === 1,
+    );
+    const luHesiTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.round_no === 1 && step.actor === "lu_hesi",
+    );
+    expect(roundOrder?.notes).toContain("首轮同在起点，暂无前后顺序，西格莉卡不标记");
+    expect(luHesiTurn?.steps).toBe(2);
+    expect(luHesiTurn?.notes).not.toContain("标记影响 -1");
+  });
+
+  it("still lets Siglica use the configured same-tile order away from the start", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [2];
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["lu_hesi", "siglica"],
+        positions: { lu_hesi: 4, siglica: 4 },
+        stack_order: ["lu_hesi", "siglica"],
+      },
+      20260510,
+    );
+    const luHesiTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.round_no === 1 && step.actor === "lu_hesi",
+    );
+    expect(luHesiTurn?.steps).toBe(1);
+    expect(luHesiTurn?.notes).toContain("标记影响 -1");
+  });
+
   it("supports guaranteed skip and guaranteed double roll variants", () => {
     const linnaeConfig = cloneConfig();
     linnaeConfig.assumptions.dice_sides = [2];

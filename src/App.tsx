@@ -352,6 +352,11 @@ export default function App() {
             })}
           </div>
 
+          <div className="position-guide">
+            <strong>站位 / 同格顺序</strong>
+            <span>同一格内列表越靠上越靠前，可用右侧箭头调整；首轮全员在起点时暂不计算前后。</span>
+          </div>
+
           <div className="position-list" aria-label="站位和同格顺序">
             {orderedSelectedRacers.map((racerId, index) => {
               const racer = racers[racerId];

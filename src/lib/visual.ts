@@ -9,6 +9,21 @@ import {
 } from "../types";
 import { buildRacers, shortUnitName, skillLabel } from "./sim";
 
+const racerIcons: Record<string, string> = {
+  aemis: new URL("../../assets/tuanzi-icons/aemis.png", import.meta.url).href,
+  carllotta: new URL("../../assets/tuanzi-icons/carllotta.png", import.meta.url).href,
+  cartethyia: new URL("../../assets/tuanzi-icons/katixiya.png", import.meta.url).href,
+  chisaki: new URL("../../assets/tuanzi-icons/chisaki.png", import.meta.url).href,
+  denia: new URL("../../assets/tuanzi-icons/daniya.png", import.meta.url).href,
+  hiyuki: new URL("../../assets/tuanzi-icons/weixue.png", import.meta.url).href,
+  linnae: new URL("../../assets/tuanzi-icons/linnae.png", import.meta.url).href,
+  lu_hesi: new URL("../../assets/tuanzi-icons/lu-hesi.png", import.meta.url).href,
+  morning: new URL("../../assets/tuanzi-icons/morning.png", import.meta.url).href,
+  phoebe: new URL("../../assets/tuanzi-icons/feibi.png", import.meta.url).href,
+  shorekeeper: new URL("../../assets/tuanzi-icons/shorekeeper.png", import.meta.url).href,
+  siglica: new URL("../../assets/tuanzi-icons/xigelika.png", import.meta.url).href,
+};
+
 export function buildTrackLayout(config: TuanziConfig): TrackLayout {
   const sequence = [...config.track.sequence];
   const mechanisms = config.track.mechanisms;
@@ -117,6 +132,7 @@ export function buildVisualUnits(config: TuanziConfig, racerIds: string[]): Visu
       name: racer.name,
       short: shortUnitName(racer.name),
       color: palette[index % palette.length],
+      icon: racerIcons[racerId],
       skill: skillLabel(racer.skill),
     };
   });

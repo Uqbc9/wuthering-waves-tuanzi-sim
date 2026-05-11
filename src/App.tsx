@@ -582,6 +582,14 @@ function ResultRow({
   );
 }
 
+function UnitAvatar({ unit, className = "" }: { unit?: VisualUnit; className?: string }) {
+  const classes = ["unit-avatar", className].filter(Boolean).join(" ");
+  if (unit?.icon) {
+    return <img className={classes} src={unit.icon} alt="" draggable={false} />;
+  }
+  return <i className={classes} style={{ background: unit?.color ?? "#8d9a94" }} />;
+}
+
 function RacePanel({
   playback,
   racers,
@@ -631,7 +639,12 @@ function RacePanel({
   }
 
   const unitMap = Object.fromEntries(playback.units.map((unit) => [unit.id, unit]));
-  const rankingText = step.ranking.map((racerId) => racers[racerId]?.name ?? racerId).join(" / ");
+  const rankedUnits = step.ranking.map((racerId) => ({
+    id: racerId,
+    unit: unitMap[racerId],
+    name: unitMap[racerId]?.name ?? racers[racerId]?.name ?? racerId,
+  }));
+  const rankingText = rankedUnits.map((item) => item.name).join(" / ");
   const notes = step.notes ?? [];
 
   return (
@@ -705,7 +718,15 @@ function RacePanel({
           </div>
           <div className="ranking-box">
             <span>排名</span>
-            <p>{rankingText}</p>
+            <div className="ranking-list" aria-label={rankingText}>
+              {rankedUnits.map(({ id, unit, name }, index) => (
+                <span key={`${id}-${index}`} className="ranking-chip" title={unit?.skill ?? name}>
+                  <b>{index + 1}</b>
+                  <UnitAvatar unit={unit} />
+                  <em>{name}</em>
+                </span>
+              ))}
+            </div>
           </div>
           <RoundReadout
             currentActor={typeof step.actor === "string" ? step.actor : undefined}
@@ -846,26 +867,56 @@ function TrackBoard({
             y2={guide.y2}
           />
         ))}
-        {tokens.map(({ unit, x, y, radius, order, count, rawPosition, actor, mover, finished }) => (
-          <g
-            key={`${unit.id}-${rawPosition}-${order}`}
-            className={[
-              "token",
-              unit.id === BUDDAWANG_ID ? "special" : "",
-              actor ? "actor" : "",
-              mover ? "mover" : "",
-              finished ? "finished" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            <circle cx={x} cy={y} r={radius} fill={unit.color} />
-            <text x={x} y={y + radius * 0.16}>{unit.short}</text>
-            <title>
-              {unit.name} · 堆叠 {order + 1}/{count} · {unit.skill}
-            </title>
-          </g>
-        ))}
+        <defs>
+          {tokens.map(({ unit, x, y, radius, order, rawPosition }) => {
+            if (!unit.icon) {
+              return null;
+            }
+            const tokenKey = `${unit.id}-${rawPosition}-${order}`;
+            return (
+              <clipPath key={tokenKey} id={`token-clip-${tokenKey}`} clipPathUnits="userSpaceOnUse">
+                <circle cx={x} cy={y} r={radius * 0.82} />
+              </clipPath>
+            );
+          })}
+        </defs>
+        {tokens.map(({ unit, x, y, radius, order, count, rawPosition, actor, mover, finished }) => {
+          const tokenKey = `${unit.id}-${rawPosition}-${order}`;
+          const avatarRadius = radius * 0.82;
+          return (
+            <g
+              key={tokenKey}
+              className={[
+                "token",
+                unit.id === BUDDAWANG_ID ? "special" : "",
+                actor ? "actor" : "",
+                mover ? "mover" : "",
+                finished ? "finished" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              <circle cx={x} cy={y} r={radius} fill={unit.color} />
+              {unit.icon ? (
+                <image
+                  className="token-avatar-svg"
+                  href={unit.icon}
+                  x={x - avatarRadius}
+                  y={y - avatarRadius}
+                  width={avatarRadius * 2}
+                  height={avatarRadius * 2}
+                  preserveAspectRatio="xMidYMid slice"
+                  clipPath={`url(#token-clip-${tokenKey})`}
+                />
+              ) : (
+                <text x={x} y={y + radius * 0.16}>{unit.short}</text>
+              )}
+              <title>
+                {unit.name} · 堆叠 {order + 1}/{count} · {unit.skill}
+              </title>
+            </g>
+          );
+        })}
       </svg>
       <div className="mechanism-legend" aria-label="赛道机关说明">
         {playback.track.mechanisms.map((mechanism) => (
@@ -879,8 +930,8 @@ function TrackBoard({
       <div className="unit-legend">
         {playback.units.map((unit) => (
           <span key={unit.id} title={unit.skill}>
-            <i style={{ background: unit.color }} />
-            {unit.name}
+            <UnitAvatar unit={unit} />
+            <strong>{unit.name}</strong>
           </span>
         ))}
       </div>
@@ -926,9 +977,9 @@ function RoundReadout({
               title={unit?.skill}
             >
               <span className="current-order">
-                <i style={{ background: unit?.color ?? "#8d9a94" }} />
+                <UnitAvatar unit={unit} />
                 <b>{index + 1}.</b>
-                {unit?.short ?? unitId}
+                <strong>{unit?.name ?? unitId}</strong>
               </span>
               <span className="current-roll">{rollText}</span>
             </div>

@@ -209,6 +209,7 @@ export type VisualUnit = {
   name: string;
   short: string;
   color: string;
+  icon?: string;
   skill: string;
   special?: boolean;
 };

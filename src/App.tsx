@@ -316,6 +316,7 @@ export default function App() {
             <button
               type="button"
               className={lapMode === "first" ? "active" : ""}
+              aria-pressed={lapMode === "first"}
               onClick={() => setLapMode("first")}
             >
               第一圈
@@ -323,6 +324,7 @@ export default function App() {
             <button
               type="button"
               className={lapMode === "second" ? "active" : ""}
+              aria-pressed={lapMode === "second"}
               onClick={() => setLapMode("second")}
             >
               第二圈
@@ -382,6 +384,7 @@ export default function App() {
                       onClick={() => moveStackOrder(racerId, -1)}
                       disabled={index === 0}
                       title="同格顺序上移"
+                      aria-label={`${racer?.name ?? racerId} 同格顺序上移`}
                     >
                       <ChevronUp size={16} />
                     </button>
@@ -391,6 +394,7 @@ export default function App() {
                       onClick={() => moveStackOrder(racerId, 1)}
                       disabled={index === orderedSelectedRacers.length - 1}
                       title="同格顺序下移"
+                      aria-label={`${racer?.name ?? racerId} 同格顺序下移`}
                     >
                       <ChevronDown size={16} />
                     </button>
@@ -419,11 +423,23 @@ export default function App() {
           </div>
 
           <div className="button-row">
-            <button className="primary-button" onClick={runSimulation} disabled={isRunning}>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={runSimulation}
+              disabled={isRunning}
+              aria-busy={isRunning}
+            >
               {isRunning ? <RefreshCw size={18} className="spin" /> : <Calculator size={18} />}
               {isRunning ? "计算中" : "开始模拟"}
             </button>
-            <button className="icon-button" onClick={shareCurrent} title="分享当前参数">
+            <button
+              type="button"
+              className="icon-button"
+              onClick={shareCurrent}
+              title="分享当前参数"
+              aria-label="分享当前参数"
+            >
               <Copy size={18} />
             </button>
           </div>
@@ -462,10 +478,18 @@ function ResultPanel({
 }) {
   if (!result) {
     return (
-      <section className="panel result-panel skeleton">
-        <div className="section-title">
-          <Calculator size={18} />
-          <h2>模拟结果</h2>
+      <section className="panel result-panel skeleton" aria-busy="true">
+        <div className="panel-heading">
+          <div className="section-title">
+            <Calculator size={18} />
+            <h2>模拟结果</h2>
+          </div>
+          <div className="run-chip skeleton-chip" aria-hidden="true" />
+        </div>
+        <div className="result-skeleton" aria-hidden="true">
+          {Array.from({ length: 6 }, (_, index) => (
+            <span key={index} />
+          ))}
         </div>
       </section>
     );
@@ -482,7 +506,7 @@ function ResultPanel({
     .sort((left, right) => left.avgRank - right.avgRank);
 
   return (
-    <section className="panel result-panel">
+    <section className="panel result-panel" aria-live="polite">
       <div className="panel-heading">
         <div className="section-title">
           <Calculator size={18} />
@@ -494,21 +518,21 @@ function ResultPanel({
 
       <div className="result-table" role="table">
         <div className="result-row result-head" role="row">
-          <span>团子</span>
+          <span role="columnheader">团子</span>
           {result.type === "aggregate" ? (
             <>
-              <span>晋级率</span>
-              <span>小组第一</span>
-              <span>平均积分</span>
+              <span role="columnheader">晋级率</span>
+              <span role="columnheader">小组第一</span>
+              <span role="columnheader">平均积分</span>
             </>
           ) : (
             <>
-              <span>冠军率</span>
-              <span>Top2</span>
-              <span>Top4</span>
+              <span role="columnheader">冠军率</span>
+              <span role="columnheader">Top2</span>
+              <span role="columnheader">Top4</span>
             </>
           )}
-          <span>平均名次</span>
+          <span role="columnheader">平均名次</span>
         </div>
         {rows.map((row) => {
           if (result.type === "aggregate") {
@@ -573,12 +597,12 @@ function ResultRow({
   const width = Math.max(3, Math.min(100, (primaryValue / primaryRuns) * 100));
   return (
     <div className="result-row" role="row">
-      <span className="racer-cell" title={skill}>
+      <span className="racer-cell" title={skill} role="cell">
         {name}
         <i style={{ width: `${width}%` }} />
       </span>
       {values.map((value, index) => (
-        <span key={`${name}-${index}`} className="metric-cell">
+        <span key={`${name}-${index}`} className="metric-cell" role="cell">
           <b>{value.label}</b>
           {value.value}
         </span>
@@ -634,10 +658,25 @@ function RacePanel({
 
   if (!playback || !race || !step) {
     return (
-      <section className="panel playback-panel skeleton">
-        <div className="section-title">
-          <Play size={18} />
-          <h2>赛局回放</h2>
+      <section className="panel playback-panel skeleton" aria-busy="true">
+        <div className="panel-heading">
+          <div className="section-title">
+            <Play size={18} />
+            <h2>赛局回放</h2>
+          </div>
+          <div className="run-chip skeleton-chip" aria-hidden="true" />
+        </div>
+        <div className="playback-grid playback-placeholder" aria-hidden="true">
+          <div className="track-skeleton">
+            {Array.from({ length: 12 }, (_, index) => (
+              <span key={index} />
+            ))}
+          </div>
+          <div className="timeline-skeleton">
+            {Array.from({ length: 7 }, (_, index) => (
+              <span key={index} />
+            ))}
+          </div>
         </div>
       </section>
     );
@@ -669,27 +708,45 @@ function RacePanel({
           <h3>{playback.title}</h3>
           <p className="step-label" title={step.label}>{step.label}</p>
           <div className="timeline-controls">
-            <button className="icon-button" onClick={() => setStepIndex(0)} title="回到开赛">
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setStepIndex(0)}
+              title="回到开赛"
+              aria-label="回到开赛"
+            >
               <ChevronsLeft size={18} />
             </button>
             <button
+              type="button"
               className="icon-button"
               onClick={() => setStepIndex((current) => Math.max(0, current - 1))}
               title="上一步"
+              aria-label="上一步"
             >
               <ChevronLeft size={18} />
             </button>
-            <button className="icon-button strong" onClick={() => setPlaying((value) => !value)} title="播放">
+            <button
+              type="button"
+              className="icon-button strong"
+              onClick={() => setPlaying((value) => !value)}
+              title={playing ? "暂停" : "播放"}
+              aria-label={playing ? "暂停" : "播放"}
+              aria-pressed={playing}
+            >
               {playing ? <Pause size={18} /> : <Play size={18} />}
             </button>
             <button
+              type="button"
               className="icon-button"
               onClick={() => setStepIndex((current) => Math.min(steps.length - 1, current + 1))}
               title="下一步"
+              aria-label="下一步"
             >
               <ChevronRight size={18} />
             </button>
             <button
+              type="button"
               className="icon-button"
               onClick={() => {
                 setRaceIndex((current) => (current + 1) % playback.races.length);
@@ -697,6 +754,7 @@ function RacePanel({
                 setPlaying(false);
               }}
               title="切换样本"
+              aria-label="切换样本"
             >
               <Shuffle size={18} />
             </button>
@@ -707,6 +765,7 @@ function RacePanel({
               min={0}
               max={Math.max(0, steps.length - 1)}
               value={stepIndex}
+              aria-label="回放进度"
               onChange={(event) => setStepIndex(Number(event.target.value))}
             />
             <span>{stepIndex + 1} / {steps.length}</span>
@@ -923,22 +982,24 @@ function TrackBoard({
           );
         })}
       </svg>
-      <div className="mechanism-legend" aria-label="赛道机关说明">
-        {playback.track.mechanisms.map((mechanism) => (
-          <span key={mechanism.id} className={`mechanism-chip ${mechanism.id}`}>
-            <b>{mechanism.effect}</b>
-            <strong>{mechanism.name}</strong>
-            <em>{mechanism.positions.join("、")}格</em>
-          </span>
-        ))}
-      </div>
-      <div className="unit-legend">
-        {playback.units.map((unit) => (
-          <span key={unit.id} title={unit.skill}>
-            <UnitAvatar unit={unit} />
-            <strong>{unit.name}</strong>
-          </span>
-        ))}
+      <div className="track-footer">
+        <div className="mechanism-legend" aria-label="赛道机关说明">
+          {playback.track.mechanisms.map((mechanism) => (
+            <span key={mechanism.id} className={`mechanism-chip ${mechanism.id}`}>
+              <b>{mechanism.effect}</b>
+              <strong>{mechanism.name}</strong>
+              <em>{mechanism.positions.join("、")}格</em>
+            </span>
+          ))}
+        </div>
+        <div className="unit-legend">
+          {playback.units.map((unit) => (
+            <span key={unit.id} title={unit.skill}>
+              <UnitAvatar unit={unit} />
+              <strong>{unit.name}</strong>
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );

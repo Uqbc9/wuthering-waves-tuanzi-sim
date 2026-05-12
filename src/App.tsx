@@ -7,6 +7,7 @@ import {
   ChevronUp,
   ChevronsLeft,
   Copy,
+  Languages,
   Pause,
   Play,
   RefreshCw,
@@ -15,11 +16,27 @@ import {
 } from "lucide-react";
 import { defaultConfig } from "./config";
 import {
-  averageRank,
-  percentage,
-  racerById,
-  skillLabel,
-} from "./lib/sim";
+  cellTitle,
+  eventTypeDisplayName,
+  formatGroupLabel,
+  formatPositions,
+  formatRacerCount,
+  isLanguage,
+  languageOptions,
+  localeByLanguage,
+  matchDisplayName,
+  mechanismDisplayEffect,
+  mechanismDisplayName,
+  racerDisplayName,
+  skillDisplayText,
+  text,
+  translateError,
+  translateTimelineLabel,
+  translateTimelineNote,
+  unitShortName,
+  type Language,
+} from "./i18n";
+import { averageRank, percentage, racerById } from "./lib/sim";
 import {
   BUDDAWANG_ID,
   type AggregateSimulationResult,
@@ -119,6 +136,15 @@ function safeInitialSeed(): string {
   return initialParams.get("seed") ?? "20260510";
 }
 
+function safeInitialLanguage(): Language {
+  const requested = initialParams.get("lang");
+  if (isLanguage(requested)) {
+    return requested;
+  }
+  const stored = window.localStorage.getItem("tuanzi-language");
+  return isLanguage(stored) ? stored : "en";
+}
+
 function requestId(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
@@ -130,6 +156,7 @@ export default function App() {
   const [stackOrder, setStackOrder] = useState(() => safeInitialStackOrder(safeInitialRacerIds()));
   const [runs, setRuns] = useState(safeInitialRuns);
   const [seed, setSeed] = useState(safeInitialSeed);
+  const [language, setLanguage] = useState<Language>(() => safeInitialLanguage());
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [playback, setPlayback] = useState<RacePlaybackData | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -138,11 +165,22 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const workerRef = useRef<Worker | null>(null);
   const activeRequestRef = useRef<string>("");
+  const copy = text[language];
   const racers = useMemo(() => racerById(defaultConfig), []);
   const orderedSelectedRacers = useMemo(
     () => reconcileRacerOrder(stackOrder, selectedRacerIds),
     [selectedRacerIds, stackOrder],
   );
+  const selectedGroupLabel = useMemo(() => {
+    const groups = [
+      ...new Set(
+        selectedRacerIds
+          .map((racerId) => racers[racerId]?.group)
+          .filter((group): group is string => Boolean(group)),
+      ),
+    ];
+    return formatGroupLabel(groups, language);
+  }, [language, racers, selectedRacerIds]);
   const manualSetup = useMemo<ManualRaceSetup>(
     () => ({
       lap_mode: lapMode,
@@ -162,8 +200,18 @@ export default function App() {
     });
   }, [selectedRacerIds]);
 
+  useEffect(() => {
+    document.documentElement.lang = localeByLanguage[language];
+    document.title = copy.documentTitle;
+    document
+      .querySelector<HTMLMetaElement>('meta[name="description"]')
+      ?.setAttribute("content", copy.documentDescription);
+    window.localStorage.setItem("tuanzi-language", language);
+  }, [copy.documentDescription, copy.documentTitle, language]);
+
   const writeShareParams = (url: URL) => {
     url.searchParams.delete("match");
+    url.searchParams.set("lang", language);
     url.searchParams.set("runs", String(runs));
     url.searchParams.set("lap", lapMode);
     url.searchParams.set("racers", orderedSelectedRacers.join(","));
@@ -288,7 +336,7 @@ export default function App() {
     writeShareParams(url);
     const text = url.toString();
     if (navigator.share) {
-      await navigator.share({ title: "小团快跑手动模拟器", url: text });
+      await navigator.share({ title: copy.documentTitle, url: text });
     } else {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -299,9 +347,39 @@ export default function App() {
   return (
     <main className="shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">Wuthering Waves Tuanzi Championship</p>
-          <h1>小团快跑手动模拟器</h1>
+        <div className="brand-block">
+          <p className="eyebrow">{copy.brand}</p>
+          <h1>{copy.title}</h1>
+        </div>
+        <div className="topbar-actions">
+          <div className="topbar-meta" aria-label={copy.currentConfig}>
+            <span>
+              <b>{selectedGroupLabel}</b>
+              {copy.participating}
+            </span>
+            <span>
+              <b>{orderedSelectedRacers.length}</b>
+              {copy.racersSuffix}
+            </span>
+            <span>
+              {trackLength} {copy.trackSuffix}
+            </span>
+          </div>
+          <div className="language-switch" aria-label={copy.languageSwitch}>
+            <Languages size={16} aria-hidden="true" />
+            {languageOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={language === option.value ? "active" : ""}
+                aria-pressed={language === option.value}
+                aria-label={option.title}
+                onClick={() => setLanguage(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -309,17 +387,17 @@ export default function App() {
         <aside className="panel controls-panel">
           <div className="section-title">
             <UsersRound size={18} />
-            <h2>手动设定</h2>
+            <h2>{copy.manualSetup}</h2>
           </div>
 
-          <div className="mode-toggle" aria-label="圈数模式">
+          <div className="mode-toggle" aria-label={copy.lapMode}>
             <button
               type="button"
               className={lapMode === "first" ? "active" : ""}
               aria-pressed={lapMode === "first"}
               onClick={() => setLapMode("first")}
             >
-              第一圈
+              {copy.firstLap}
             </button>
             <button
               type="button"
@@ -327,14 +405,14 @@ export default function App() {
               aria-pressed={lapMode === "second"}
               onClick={() => setLapMode("second")}
             >
-              第二圈
+              {copy.secondLap}
             </button>
           </div>
 
-          <div className="racer-picker" aria-label="参赛团子">
+          <div className="racer-picker" aria-label={copy.racerPicker}>
             {allRacers.map((racer) => {
               const checked = selectedRacerIds.includes(racer.id);
-              const skillText = skillLabel(racer.skill);
+              const skillText = skillDisplayText(racer.skill, language);
               return (
                 <label
                   key={racer.id}
@@ -347,7 +425,7 @@ export default function App() {
                     disabled={checked && selectedRacerIds.length <= 1}
                     onChange={() => toggleRacer(racer.id)}
                   />
-                  <span title={skillText}>{racer.name}</span>
+                  <span title={skillText}>{racerDisplayName(racer, language)}</span>
                   {racer.group ? <small>{racer.group}</small> : null}
                 </label>
               );
@@ -355,21 +433,22 @@ export default function App() {
           </div>
 
           <div className="position-guide">
-            <strong>站位 / 同格顺序</strong>
-            <span>同一格内列表越靠上越靠前，可用右侧箭头调整；首轮全员在起点时暂不计算前后。</span>
+            <strong>{copy.positionGuideTitle}</strong>
+            <span>{copy.positionGuideText}</span>
           </div>
 
-          <div className="position-list" aria-label="站位和同格顺序">
+          <div className="position-list" aria-label={copy.positionsList}>
             {orderedSelectedRacers.map((racerId, index) => {
               const racer = racers[racerId];
-              const skillText = skillLabel(racer?.skill);
+              const racerName = racerDisplayName(racer ?? racerId, language);
+              const skillText = skillDisplayText(racer?.skill, language);
               return (
                 <div key={racerId} className="position-row">
                   <span className="position-name" title={skillText}>
-                    {racer?.name ?? racerId}
+                    {racerName}
                   </span>
                   <input
-                    aria-label={`${racer?.name ?? racerId} 站位`}
+                    aria-label={`${racerName} ${copy.positionAria}`}
                     type="number"
                     min={0}
                     max={trackLength}
@@ -383,8 +462,8 @@ export default function App() {
                       className="mini-button"
                       onClick={() => moveStackOrder(racerId, -1)}
                       disabled={index === 0}
-                      title="同格顺序上移"
-                      aria-label={`${racer?.name ?? racerId} 同格顺序上移`}
+                      title={copy.moveUp}
+                      aria-label={`${racerName} ${copy.moveUp}`}
                     >
                       <ChevronUp size={16} />
                     </button>
@@ -393,8 +472,8 @@ export default function App() {
                       className="mini-button"
                       onClick={() => moveStackOrder(racerId, 1)}
                       disabled={index === orderedSelectedRacers.length - 1}
-                      title="同格顺序下移"
-                      aria-label={`${racer?.name ?? racerId} 同格顺序下移`}
+                      title={copy.moveDown}
+                      aria-label={`${racerName} ${copy.moveDown}`}
                     >
                       <ChevronDown size={16} />
                     </button>
@@ -406,7 +485,7 @@ export default function App() {
 
           <div className="field-grid">
             <label className="field">
-              <span>模拟次数</span>
+              <span>{copy.runs}</span>
               <input
                 type="number"
                 min={100}
@@ -417,7 +496,7 @@ export default function App() {
               />
             </label>
             <label className="field">
-              <span>随机种子</span>
+              <span>{copy.seed}</span>
               <input value={seed} onChange={(event) => setSeed(event.target.value)} />
             </label>
           </div>
@@ -431,14 +510,14 @@ export default function App() {
               aria-busy={isRunning}
             >
               {isRunning ? <RefreshCw size={18} className="spin" /> : <Calculator size={18} />}
-              {isRunning ? "计算中" : "开始模拟"}
+              {isRunning ? copy.calculating : copy.start}
             </button>
             <button
               type="button"
               className="icon-button"
               onClick={shareCurrent}
-              title="分享当前参数"
-              aria-label="分享当前参数"
+              title={copy.shareParams}
+              aria-label={copy.shareParams}
             >
               <Copy size={18} />
             </button>
@@ -452,17 +531,19 @@ export default function App() {
               {isRunning
                 ? `${Math.round(progress * 100)}%`
                 : copied
-                  ? "链接已复制"
-                  : `${orderedSelectedRacers.length}人 · ${lapMode === "second" ? "第二圈" : "第一圈"}`}
+                  ? copy.copied
+                  : `${formatRacerCount(orderedSelectedRacers.length, language)} · ${
+                      lapMode === "second" ? copy.secondLap : copy.firstLap
+                    }`}
             </span>
           </div>
 
-          {error ? <p className="error-text">{error}</p> : null}
+          {error ? <p className="error-text">{translateError(error, language)}</p> : null}
         </aside>
 
         <section className="content-stack">
-          <ResultPanel result={result} racers={racers} />
-          <RacePanel playback={playback} racers={racers} />
+          <ResultPanel result={result} racers={racers} language={language} />
+          <RacePanel playback={playback} racers={racers} language={language} />
         </section>
       </section>
     </main>
@@ -472,17 +553,20 @@ export default function App() {
 function ResultPanel({
   result,
   racers,
+  language,
 }: {
   result: SimulationResult | null;
   racers: ReturnType<typeof racerById>;
+  language: Language;
 }) {
+  const copy = text[language];
   if (!result) {
     return (
       <section className="panel result-panel skeleton" aria-busy="true">
         <div className="panel-heading">
           <div className="section-title">
             <Calculator size={18} />
-            <h2>模拟结果</h2>
+            <h2>{copy.results}</h2>
           </div>
           <div className="run-chip skeleton-chip" aria-hidden="true" />
         </div>
@@ -498,8 +582,8 @@ function ResultPanel({
   const rows = Object.entries(result.rank_counts)
     .map(([racerId, counts]) => ({
       racerId,
-      name: racers[racerId]?.name ?? racerId,
-      skill: skillLabel(racers[racerId]?.skill),
+      name: racerDisplayName(racers[racerId] ?? racerId, language),
+      skill: skillDisplayText(racers[racerId]?.skill, language),
       counts,
       avgRank: averageRank(counts, result.runs),
     }))
@@ -510,29 +594,33 @@ function ResultPanel({
       <div className="panel-heading">
         <div className="section-title">
           <Calculator size={18} />
-          <h2>模拟结果</h2>
-          <span className="panel-subtitle">{result.match_name}</span>
+          <h2>{copy.results}</h2>
+          <span className="panel-subtitle">
+            {matchDisplayName(result.match_id, result.match_name, language)}
+          </span>
         </div>
-        <div className="run-chip">{result.runs.toLocaleString("zh-CN")} runs</div>
+        <div className="run-chip">
+          {result.runs.toLocaleString(localeByLanguage[language])} {copy.runUnit}
+        </div>
       </div>
 
       <div className="result-table" role="table">
         <div className="result-row result-head" role="row">
-          <span role="columnheader">团子</span>
+          <span role="columnheader">{copy.racer}</span>
           {result.type === "aggregate" ? (
             <>
-              <span role="columnheader">晋级率</span>
-              <span role="columnheader">小组第一</span>
-              <span role="columnheader">平均积分</span>
+              <span role="columnheader">{copy.qualifyRate}</span>
+              <span role="columnheader">{copy.groupFirst}</span>
+              <span role="columnheader">{copy.avgPoints}</span>
             </>
           ) : (
             <>
-              <span role="columnheader">冠军率</span>
+              <span role="columnheader">{copy.championRate}</span>
               <span role="columnheader">Top2</span>
               <span role="columnheader">Top4</span>
             </>
           )}
-          <span role="columnheader">平均名次</span>
+          <span role="columnheader">{copy.avgRank}</span>
         </div>
         {rows.map((row) => {
           if (result.type === "aggregate") {
@@ -548,10 +636,10 @@ function ResultPanel({
                 primaryValue={qualify}
                 primaryRuns={aggregate.runs}
                 values={[
-                  { label: "晋级率", value: percentage(qualify, aggregate.runs) },
-                  { label: "小组第一", value: percentage(champion, aggregate.runs) },
-                  { label: "平均积分", value: avgPoints.toFixed(3) },
-                  { label: "平均名次", value: row.avgRank.toFixed(3) },
+                  { label: copy.qualifyRate, value: percentage(qualify, aggregate.runs) },
+                  { label: copy.groupFirst, value: percentage(champion, aggregate.runs) },
+                  { label: copy.avgPoints, value: avgPoints.toFixed(3) },
+                  { label: copy.avgRank, value: row.avgRank.toFixed(3) },
                 ]}
               />
             );
@@ -568,10 +656,10 @@ function ResultPanel({
               primaryValue={champion}
               primaryRuns={result.runs}
               values={[
-                { label: "冠军率", value: percentage(champion, result.runs) },
+                { label: copy.championRate, value: percentage(champion, result.runs) },
                 { label: "Top2", value: percentage(top2, result.runs) },
                 { label: "Top4", value: percentage(top4, result.runs) },
-                { label: "平均名次", value: row.avgRank.toFixed(3) },
+                { label: copy.avgRank, value: row.avgRank.toFixed(3) },
               ]}
             />
           );
@@ -619,13 +707,37 @@ function UnitAvatar({ unit, className = "" }: { unit?: VisualUnit; className?: s
   return <i className={classes} style={{ background: unit?.color ?? "#8d9a94" }} />;
 }
 
+function unitDisplayName(
+  unitId: string,
+  unit: VisualUnit | undefined,
+  racers: ReturnType<typeof racerById>,
+  language: Language,
+): string {
+  return racerDisplayName(racers[unitId] ?? unitId, language) || unit?.name || unitId;
+}
+
+function unitSkillTitle(
+  unitId: string,
+  unit: VisualUnit | undefined,
+  racers: ReturnType<typeof racerById>,
+  language: Language,
+): string {
+  if (unitId === BUDDAWANG_ID) {
+    return language === "zh" ? (unit?.skill ?? "逆向巡场") : "Reverse patrol";
+  }
+  return skillDisplayText(racers[unitId]?.skill, language);
+}
+
 function RacePanel({
   playback,
   racers,
+  language,
 }: {
   playback: RacePlaybackData | null;
   racers: ReturnType<typeof racerById>;
+  language: Language;
 }) {
+  const copy = text[language];
   const [raceIndex, setRaceIndex] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -662,7 +774,7 @@ function RacePanel({
         <div className="panel-heading">
           <div className="section-title">
             <Play size={18} />
-            <h2>赛局回放</h2>
+            <h2>{copy.playback}</h2>
           </div>
           <div className="run-chip skeleton-chip" aria-hidden="true" />
         </div>
@@ -686,7 +798,7 @@ function RacePanel({
   const rankedUnits = step.ranking.map((racerId) => ({
     id: racerId,
     unit: unitMap[racerId],
-    name: unitMap[racerId]?.name ?? racers[racerId]?.name ?? racerId,
+    name: unitDisplayName(racerId, unitMap[racerId], racers, language),
   }));
   const rankingText = rankedUnits.map((item) => item.name).join(" / ");
   const notes = step.notes ?? [];
@@ -696,24 +808,28 @@ function RacePanel({
       <div className="panel-heading">
         <div className="section-title">
           <Play size={18} />
-          <h2>赛局回放</h2>
+          <h2>{copy.playback}</h2>
         </div>
-        <div className="run-chip">seed {race.seed ?? "random"}</div>
+        <div className="run-chip">
+          {copy.seedPrefix} {race.seed ?? (language === "zh" ? "随机" : "random")}
+        </div>
       </div>
 
       <div className="playback-grid">
-        <TrackBoard playback={playback} step={step} unitMap={unitMap} />
+        <TrackBoard playback={playback} step={step} unitMap={unitMap} racers={racers} language={language} />
 
         <div className="timeline-panel">
-          <h3>{playback.title}</h3>
-          <p className="step-label" title={step.label}>{step.label}</p>
+          <h3>{matchDisplayName(playback.match_id, playback.title, language)}</h3>
+          <p className="step-label" title={translateTimelineLabel(step.label, language)}>
+            {translateTimelineLabel(step.label, language)}
+          </p>
           <div className="timeline-controls">
             <button
               type="button"
               className="icon-button"
               onClick={() => setStepIndex(0)}
-              title="回到开赛"
-              aria-label="回到开赛"
+              title={copy.resetStart}
+              aria-label={copy.resetStart}
             >
               <ChevronsLeft size={18} />
             </button>
@@ -721,8 +837,8 @@ function RacePanel({
               type="button"
               className="icon-button"
               onClick={() => setStepIndex((current) => Math.max(0, current - 1))}
-              title="上一步"
-              aria-label="上一步"
+              title={copy.prevStep}
+              aria-label={copy.prevStep}
             >
               <ChevronLeft size={18} />
             </button>
@@ -730,8 +846,8 @@ function RacePanel({
               type="button"
               className="icon-button strong"
               onClick={() => setPlaying((value) => !value)}
-              title={playing ? "暂停" : "播放"}
-              aria-label={playing ? "暂停" : "播放"}
+              title={playing ? copy.pause : copy.play}
+              aria-label={playing ? copy.pause : copy.play}
               aria-pressed={playing}
             >
               {playing ? <Pause size={18} /> : <Play size={18} />}
@@ -740,8 +856,8 @@ function RacePanel({
               type="button"
               className="icon-button"
               onClick={() => setStepIndex((current) => Math.min(steps.length - 1, current + 1))}
-              title="下一步"
-              aria-label="下一步"
+              title={copy.nextStep}
+              aria-label={copy.nextStep}
             >
               <ChevronRight size={18} />
             </button>
@@ -753,8 +869,8 @@ function RacePanel({
                 setStepIndex(0);
                 setPlaying(false);
               }}
-              title="切换样本"
-              aria-label="切换样本"
+              title={copy.switchSample}
+              aria-label={copy.switchSample}
             >
               <Shuffle size={18} />
             </button>
@@ -765,26 +881,32 @@ function RacePanel({
               min={0}
               max={Math.max(0, steps.length - 1)}
               value={stepIndex}
-              aria-label="回放进度"
+              aria-label={copy.playbackProgress}
               onChange={(event) => setStepIndex(Number(event.target.value))}
             />
             <span>{stepIndex + 1} / {steps.length}</span>
           </div>
           <div className="round-stats">
             <div>
-              <span>轮数</span>
+              <span>{copy.rounds}</span>
               <strong>{race.rounds}</strong>
             </div>
             <div>
-              <span>当前事件</span>
-              <strong title={step.event_type}>{step.event_type}</strong>
+              <span>{copy.currentEvent}</span>
+              <strong title={eventTypeDisplayName(step.event_type, language)}>
+                {eventTypeDisplayName(step.event_type, language)}
+              </strong>
             </div>
           </div>
           <div className="ranking-box">
-            <span>排名</span>
+            <span>{copy.ranking}</span>
             <div className="ranking-list" aria-label={rankingText}>
               {rankedUnits.map(({ id, unit, name }, index) => (
-                <span key={`${id}-${index}`} className="ranking-chip" title={unit?.skill ?? name}>
+                <span
+                  key={`${id}-${index}`}
+                  className="ranking-chip"
+                  title={unitSkillTitle(id, unit, racers, language)}
+                >
                   <b>{index + 1}</b>
                   <UnitAvatar unit={unit} />
                   <em>{name}</em>
@@ -797,14 +919,18 @@ function RacePanel({
             currentRound={step.round_no ?? (step.event_type === "finish" ? race.rounds : undefined)}
             rounds={race.round_summaries}
             unitMap={unitMap}
+            racers={racers}
+            language={language}
           />
           <div className={notes.length > 0 ? "notes-box" : "notes-box empty"} aria-live="polite">
             {notes.length > 0 ? (
               notes.map((note) => (
-                <span key={note} title={note}>{note}</span>
+                <span key={note} title={translateTimelineNote(note, language)}>
+                  {translateTimelineNote(note, language)}
+                </span>
               ))
             ) : (
-              <span>无额外说明</span>
+              <span>{copy.noSpecial}</span>
             )}
           </div>
         </div>
@@ -817,11 +943,16 @@ function TrackBoard({
   playback,
   step,
   unitMap,
+  racers,
+  language,
 }: {
   playback: RacePlaybackData;
   step: TimelineStep;
   unitMap: Record<string, VisualUnit>;
+  racers: ReturnType<typeof racerById>;
+  language: Language;
 }) {
+  const copy = text[language];
   const cells = playback.track.cells.filter((cell) => cell.visible);
   const cellByPosition = Object.fromEntries(cells.map((cell) => [cell.position, cell]));
   const stackEntries: Array<{
@@ -896,7 +1027,7 @@ function TrackBoard({
         className="track-board"
         viewBox="0.35 0.35 12.3 12.3"
         role="img"
-        aria-label="赛道回放"
+        aria-label={copy.trackPlayback}
       >
         <path
           className="track-loop"
@@ -912,12 +1043,17 @@ function TrackBoard({
               x={cell.x}
               y={cell.y + 0.05}
             >
-              {cell.label}
+              {mechanismDisplayEffect(cell.mechanism_id, cell.label, language) || cell.label}
             </text>
             <title>
-              {cell.mechanism_name
-                ? `${cell.display_position} ${cell.mechanism_name}：${cell.mechanism_effect}`
-                : cell.display_position}
+              {cellTitle(
+                cell.display_position,
+                cell.mechanism_name
+                  ? { id: cell.mechanism_id ?? "", name: cell.mechanism_name }
+                  : null,
+                cell.mechanism_effect,
+                language,
+              )}
             </title>
           </g>
         ))}
@@ -973,30 +1109,31 @@ function TrackBoard({
                   clipPath={`url(#token-clip-${tokenKey})`}
                 />
               ) : (
-                <text x={x} y={y + radius * 0.16}>{unit.short}</text>
+                <text x={x} y={y + radius * 0.16}>{unitShortName(unit.id, unit.short, language)}</text>
               )}
               <title>
-                {unit.name} · 堆叠 {order + 1}/{count} · {unit.skill}
+                {unitDisplayName(unit.id, unit, racers, language)} · {copy.stackLabel} {order + 1}/{count} ·{" "}
+                {unitSkillTitle(unit.id, unit, racers, language)}
               </title>
             </g>
           );
         })}
       </svg>
       <div className="track-footer">
-        <div className="mechanism-legend" aria-label="赛道机关说明">
+        <div className="mechanism-legend" aria-label={copy.mechanismLegend}>
           {playback.track.mechanisms.map((mechanism) => (
             <span key={mechanism.id} className={`mechanism-chip ${mechanism.id}`}>
-              <b>{mechanism.effect}</b>
-              <strong>{mechanism.name}</strong>
-              <em>{mechanism.positions.join("、")}格</em>
+              <b>{mechanismDisplayEffect(mechanism.id, mechanism.effect, language)}</b>
+              <strong>{mechanismDisplayName(mechanism.id, mechanism.name, language)}</strong>
+              <em>{formatPositions(mechanism.positions, language)}</em>
             </span>
           ))}
         </div>
         <div className="unit-legend">
           {playback.units.map((unit) => (
-            <span key={unit.id} title={unit.skill}>
+            <span key={unit.id} title={unitSkillTitle(unit.id, unit, racers, language)}>
               <UnitAvatar unit={unit} />
-              <strong>{unit.name}</strong>
+              <strong>{unitDisplayName(unit.id, unit, racers, language)}</strong>
             </span>
           ))}
         </div>
@@ -1010,12 +1147,17 @@ function RoundReadout({
   currentRound,
   rounds,
   unitMap,
+  racers,
+  language,
 }: {
   currentActor?: string;
   currentRound?: number;
   rounds: RoundSummary[];
   unitMap: Record<string, VisualUnit>;
+  racers: ReturnType<typeof racerById>;
+  language: Language;
 }) {
+  const copy = text[language];
   const round = rounds.find((item) => item.round_no === currentRound) ?? rounds[0] ?? null;
   if (!round) {
     return null;
@@ -1026,10 +1168,19 @@ function RoundReadout({
   return (
     <div className="round-readout">
       <div className="round-readout-title">
-        <span>第 {round.round_no} 轮</span>
-        <small>{round.roll_count} 次</small>
+        <span>{language === "zh" ? `第 ${round.round_no} 轮` : `Round ${round.round_no}`}</span>
+        <small>
+          {round.roll_count} {copy.rollCountSuffix}
+        </small>
       </div>
-      <div className="current-round-list" aria-label={`第 ${round.round_no} 轮行动顺序和骰点`}>
+      <div
+        className="current-round-list"
+        aria-label={
+          language === "zh"
+            ? `第 ${round.round_no} 轮${copy.actionOrderAria}`
+            : `Round ${round.round_no} ${copy.actionOrderAria}`
+        }
+      >
         {round.action_order.map((unitId, index) => {
           const unit = unitMap[unitId];
           const roll = rollsByActor.get(unitId);
@@ -1040,12 +1191,12 @@ function RoundReadout({
             <div
               key={`${round.round_no}-${unitId}-${index}`}
               className={unitId === highlightedActor ? "current-round-row active" : "current-round-row"}
-              title={unit?.skill}
+              title={unitSkillTitle(unitId, unit, racers, language)}
             >
               <span className="current-order">
                 <UnitAvatar unit={unit} />
                 <b>{index + 1}.</b>
-                <strong>{unit?.name ?? unitId}</strong>
+                <strong>{unitDisplayName(unitId, unit, racers, language)}</strong>
               </span>
               <span className="current-roll">{rollText}</span>
             </div>

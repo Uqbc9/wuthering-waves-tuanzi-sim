@@ -1,6 +1,6 @@
 :root {
   color: #16202a;
-  background: #f6f7f4;
+  background: #f3f5f2;
   font-family:
     Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -18,9 +18,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   overflow-x: hidden;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 247, 244, 0.95)),
-    #f6f7f4;
+  background: #f3f5f2;
 }
 
 button,
@@ -58,19 +56,99 @@ input:focus-visible,
 
 .topbar {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 4px 0 10px;
+  padding: 4px 0 12px;
+  border-bottom: 1px solid #dde3dc;
+}
+
+.brand-block {
+  min-width: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
 }
 
 .eyebrow {
   margin: 0 0 4px;
-  color: #65727f;
+  color: #587078;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.topbar-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  max-width: min(58vw, 720px);
+}
+
+.topbar-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  border: 1px solid #d4dcd3;
+  border-radius: 8px;
+  background: #fbfcf8;
+  color: #56636d;
+  padding: 4px 9px;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.topbar-meta b {
+  color: #1d2a33;
+  font-weight: 850;
+}
+
+.language-switch {
+  display: inline-grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  border: 1px solid #d4dcd3;
+  border-radius: 8px;
+  background: #eef2ec;
+  color: #586570;
+  padding: 3px;
+}
+
+.language-switch svg {
+  margin: 0 4px 0 6px;
+}
+
+.language-switch button {
+  min-width: 44px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #586570;
+  font-size: 12px;
+  font-weight: 850;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.language-switch button.active {
+  background: #fffefa;
+  color: #17232c;
+  box-shadow: 0 1px 2px rgba(32, 44, 54, 0.1);
 }
 
 h1,
@@ -82,8 +160,8 @@ p {
 
 h1 {
   margin-bottom: 0;
-  font-size: clamp(30px, 2.4vw, 44px);
-  line-height: 1.05;
+  font-size: clamp(28px, 2.1vw, 38px);
+  line-height: 1.1;
   letter-spacing: 0;
 }
 
@@ -105,10 +183,10 @@ h3 {
   gap: 6px;
   min-height: 32px;
   padding: 6px 10px;
-  border: 1px solid #d7ddd6;
+  border: 1px solid #d4dcd3;
   border-radius: 8px;
-  background: #ffffff;
-  color: #44515c;
+  background: #fbfcf8;
+  color: #42505a;
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
@@ -130,10 +208,10 @@ h3 {
 
 .panel {
   min-width: 0;
-  border: 1px solid #dce1dc;
+  border: 1px solid #d8dfd6;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 16px 40px rgba(33, 48, 56, 0.08);
+  background: #fffefa;
+  box-shadow: 0 1px 0 rgba(33, 48, 56, 0.04);
 }
 
 .controls-panel {
@@ -142,6 +220,7 @@ h3 {
   align-self: stretch;
   display: grid;
   gap: 16px;
+  border-left: 3px solid #1b8a8f;
   padding: 18px;
 }
 
@@ -149,9 +228,9 @@ h3 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  border: 1px solid #d7ddd6;
+  border: 1px solid #d4dcd3;
   border-radius: 8px;
-  background: #eef2ef;
+  background: #eef2ec;
   padding: 4px;
 }
 
@@ -162,7 +241,7 @@ h3 {
   border-radius: 6px;
   background: transparent;
   color: #586570;
-  font-weight: 800;
+  font-weight: 750;
   transition:
     background-color 160ms ease,
     box-shadow 160ms ease,
@@ -171,9 +250,9 @@ h3 {
 }
 
 .mode-toggle button.active {
-  background: #ffffff;
+  background: #fffefa;
   color: #17232c;
-  box-shadow: 0 1px 6px rgba(32, 44, 54, 0.12);
+  box-shadow: 0 1px 2px rgba(32, 44, 54, 0.1);
 }
 
 .racer-picker {
@@ -195,13 +274,13 @@ h3 {
   gap: 8px;
   min-width: 0;
   min-height: 38px;
-  border: 1px solid #dfe5de;
+  border: 1px solid #dce4db;
   border-radius: 8px;
-  background: #fbfcfa;
+  background: #fffefa;
   color: #46535e;
   padding: 7px 9px;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 750;
   cursor: pointer;
   transition:
     background-color 160ms ease,
@@ -233,16 +312,16 @@ h3 {
   height: 20px;
   flex: 0 0 20px;
   border-radius: 999px;
-  background: #e7ece7;
+  background: #ecf0ea;
   color: #66727c;
   font-size: 11px;
 }
 
 .racer-toggle.active {
   border-color: #1b8a8f;
-  background: #edf8f6;
+  background: #eff8f4;
   color: #0f5559;
-  box-shadow: inset 0 0 0 1px rgba(27, 138, 143, 0.08);
+  box-shadow: inset 3px 0 0 #1b8a8f;
 }
 
 .racer-toggle.active small {
@@ -265,9 +344,9 @@ h3 {
   display: grid;
   gap: 2px;
   min-width: 0;
-  border: 1px solid #d7ddd6;
+  border: 1px solid #d4dcd3;
   border-radius: 8px;
-  background: #fbfcfa;
+  background: #f7f8f2;
   color: #46535b;
   padding: 8px 10px;
 }
@@ -290,9 +369,9 @@ h3 {
   gap: 8px;
   align-items: center;
   min-width: 0;
-  border: 1px solid #e0e6df;
+  border: 1px solid #dfe6de;
   border-radius: 8px;
-  background: #ffffff;
+  background: #fffefa;
   padding: 8px;
 }
 
@@ -312,7 +391,7 @@ h3 {
   min-height: 34px;
   border: 1px solid #cbd4cc;
   border-radius: 8px;
-  background: #fbfcfa;
+  background: #f9faf6;
   color: #16202a;
   padding: 0 8px;
   outline: none;
@@ -337,7 +416,7 @@ h3 {
   min-height: 34px;
   border: 1px solid #cfd7d0;
   border-radius: 8px;
-  background: #ffffff;
+  background: #fffefa;
   color: #23303a;
   padding: 0;
   transition:
@@ -399,7 +478,7 @@ h3 {
   min-height: 44px;
   border: 1px solid #cbd4cc;
   border-radius: 8px;
-  background: #fbfcfa;
+  background: #f9faf6;
   color: #16202a;
   padding: 0 12px;
   outline: none;
@@ -442,7 +521,7 @@ h3 {
 
 .primary-button {
   flex: 1;
-  background: #19313b;
+  background: #203941;
   color: #ffffff;
   padding: 0 16px;
 }
@@ -455,7 +534,7 @@ h3 {
   width: 44px;
   flex: 0 0 44px;
   border-color: #cfd7d0;
-  background: #ffffff;
+  background: #fffefa;
   color: #23303a;
 }
 
@@ -477,14 +556,14 @@ h3 {
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e5ebe5;
+  background: #e2e8e1;
 }
 
 .progress-track span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #1b8a8f, #d45335);
+  background: #1b8a8f;
   transition: width 160ms ease;
 }
 
@@ -502,10 +581,10 @@ h3 {
   gap: 10px;
   min-width: 0;
   min-height: 36px;
-  border: 1px solid #e0e6df;
+  border: 1px solid #dfe6de;
   border-radius: 8px;
   padding: 8px 10px;
-  background: #fbfcfa;
+  background: #f9faf6;
 }
 
 .meta-list span,
@@ -556,10 +635,10 @@ h3 {
   gap: 8px;
   align-items: center;
   min-height: 48px;
-  border: 1px solid #e2e7e1;
+  border: 1px solid #dfe6de;
   border-radius: 8px;
   padding: 8px;
-  background: #ffffff;
+  background: #fffefa;
   color: #22303a;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
@@ -608,7 +687,7 @@ h3 {
   min-height: 28px;
   overflow: hidden;
   border-radius: 6px;
-  background: #f7faf8;
+  background: #f4f7f3;
   padding: 4px 8px;
   font-weight: 800;
   line-height: 1;
@@ -641,9 +720,9 @@ h3 {
   display: block;
   width: 100%;
   aspect-ratio: 1;
-  border: 1px solid #dfe5de;
+  border: 1px solid #d9e1d8;
   border-radius: 8px;
-  background: #fbfcfa;
+  background: #fafbf6;
 }
 
 .track-loop {
@@ -750,17 +829,17 @@ h3 {
   align-items: center;
   gap: 5px;
   min-height: 32px;
-  border: 1px solid #e0e6df;
+  border: 1px solid #dfe6de;
   border-radius: 8px;
   padding: 5px 9px;
-  background: #ffffff;
+  background: #fffefa;
   color: #44515d;
   font-size: 13px;
   font-weight: 700;
 }
 
 .mechanism-chip {
-  background: #fbfcfa;
+  background: #f9faf6;
   color: #3d4a54;
 }
 
@@ -834,10 +913,10 @@ h3 {
   min-height: 52px;
   margin: 0;
   overflow: hidden;
-  border: 1px solid #e0e6df;
+  border: 1px solid #dfe6de;
   border-radius: 8px;
   padding: 12px;
-  background: #fbfcfa;
+  background: #f9faf6;
   color: #24323c;
   font-size: 16px;
   font-weight: 800;
@@ -889,9 +968,9 @@ h3 {
 .ranking-box,
 .round-readout,
 .notes-box {
-  border: 1px solid #e0e6df;
+  border: 1px solid #dfe6de;
   border-radius: 8px;
-  background: #ffffff;
+  background: #fffefa;
   padding: 10px;
 }
 
@@ -914,10 +993,10 @@ h3 {
   gap: 5px;
   max-width: 100%;
   min-height: 30px;
-  border: 1px solid #e0e6df;
+  border: 1px solid #dfe6de;
   border-radius: 8px;
   padding: 4px 7px;
-  background: #fbfcfa;
+  background: #f9faf6;
   color: #1e2b35;
   font-size: 12px;
   font-weight: 800;
@@ -979,9 +1058,9 @@ h3 {
   align-items: center;
   gap: 8px;
   min-height: 32px;
-  border: 1px solid #e0e6df;
+  border: 1px solid #dfe6de;
   border-radius: 8px;
-  background: #fbfcfa;
+  background: #f9faf6;
   color: #2b3842;
   padding: 5px 8px;
   font-size: 13px;
@@ -990,8 +1069,8 @@ h3 {
 
 .current-round-row.active {
   border-color: #1b8a8f;
-  background: #edf8f6;
-  box-shadow: 0 0 0 3px rgba(27, 138, 143, 0.14);
+  background: #eff8f4;
+  box-shadow: inset 3px 0 0 #1b8a8f;
 }
 
 .current-order {
@@ -1039,13 +1118,13 @@ h3 {
 }
 
 .notes-box.empty {
-  background: #fbfcfa;
+  background: #f9faf6;
 }
 
 .notes-box span {
   max-width: 100%;
   border-radius: 999px;
-  background: #edf6f4;
+  background: #edf6f2;
   color: #12686d;
   padding: 4px 8px;
   font-size: 12px;
@@ -1236,6 +1315,7 @@ h3 {
 
 @media (hover: hover) {
   .mode-toggle button:hover:not(.active),
+  .language-switch button:hover:not(.active),
   .racer-toggle:hover:not(.active),
   .mini-button:hover:not(:disabled),
   .icon-button:hover:not(:disabled) {
@@ -1690,6 +1770,24 @@ h3 {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+    gap: 10px;
+  }
+
+  .topbar-actions {
+    align-items: flex-start;
+    justify-content: flex-start;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .topbar-meta {
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+
+  .topbar-meta span {
+    min-height: 28px;
+    padding-inline: 8px;
   }
 
   .field-grid,

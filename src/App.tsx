@@ -7,6 +7,7 @@ import {
   ChevronUp,
   ChevronsLeft,
   Copy,
+  Github,
   Languages,
   Pause,
   Play,
@@ -58,6 +59,7 @@ const initialParams = new URLSearchParams(window.location.search);
 const allRacers = defaultConfig.racers;
 const allRacerIds = new Set(allRacers.map((racer) => racer.id));
 const trackLength = Number(defaultConfig.assumptions.track_length);
+const GITHUB_REPOSITORY_URL = "https://github.com/Uqbc9/wuthering-waves-tuanzi-sim";
 
 function clampPosition(value: unknown): number {
   const numeric = Number(value);
@@ -365,6 +367,16 @@ export default function App() {
               {trackLength} {copy.trackSuffix}
             </span>
           </div>
+          <a
+            className="icon-button github-link"
+            href={GITHUB_REPOSITORY_URL}
+            target="_blank"
+            rel="noreferrer"
+            title={copy.githubRepository}
+            aria-label={copy.githubRepository}
+          >
+            <Github size={18} aria-hidden="true" />
+          </a>
           <div className="language-switch" aria-label={copy.languageSwitch}>
             <Languages size={16} aria-hidden="true" />
             {languageOptions.map((option) => (

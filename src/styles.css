@@ -43,6 +43,7 @@ button:disabled {
 
 button:focus-visible,
 input:focus-visible,
+.icon-button:focus-visible,
 .racer-toggle:focus-within {
   outline: 3px solid rgba(27, 138, 143, 0.22);
   outline-offset: 2px;
@@ -536,6 +537,7 @@ h3 {
   border-color: #cfd7d0;
   background: #fffefa;
   color: #23303a;
+  text-decoration: none;
 }
 
 .icon-button.strong {

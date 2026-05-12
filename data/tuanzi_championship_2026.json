@@ -222,9 +222,10 @@
       "group": "B",
       "skill": {
         "name": "电子幽灵登场",
-        "description": "每场比赛一次，当该团子经过赛程中点后，若前方存在其他非布大王的团子，则会传送到最近团子顶端。",
+        "description": "每场比赛一次，轮到自己行动并走完格子后，若位于15格及以上且前方存在其他非布大王的团子，则会传送到最近团子顶端；被别人带动或前方无人时不会触发。",
         "type": "midpoint_nearest_ahead_teleport_once",
-        "trigger_once": true
+        "trigger_once": true,
+        "trigger_position": 15
       }
     },
     {

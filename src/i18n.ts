@@ -218,8 +218,8 @@ const skillLabels: Record<string, Record<Language, string>> = {
     en: "Sun Sprite, lend a hand: marks up to two nearby higher-ranked racers at round start; marked racers move 1 fewer step.",
   },
   midpoint_nearest_ahead_teleport_once: {
-    zh: "中点传送",
-    en: "Electronic Ghost: once per race after crossing the midpoint, teleports to the top of the nearest racer ahead.",
+    zh: "达标传送",
+    en: "Electronic Ghost: once per race after ending its own move at the trigger tile or beyond, teleports to the top of the nearest racer ahead.",
   },
   none: { zh: "无技能", en: "No skill" },
   per_move_chance_bonus: {
@@ -398,7 +398,6 @@ export function translateTimelineNote(note: string, language: Language): string 
       "All racers start together, so Siglica does not mark anyone in round 1",
     "所有团子需先到下一次起终点，再完整跑一圈到起终点":
       "Each racer must first reach the next start/finish, then complete a full lap back to start/finish",
-    "越过中点，前方无可传送目标": "Crossed the midpoint, but no teleport target is ahead",
     "追赶状态开启": "Comeback state activated",
   };
   if (staticNotes[note]) {
@@ -441,9 +440,9 @@ export function translateTimelineNote(note: string, language: Language): string 
   if (match) {
     return `Siglica marked ${translateNameList(match[1], language)}`;
   }
-  match = note.match(/^越过中点，传送到(.+)顶端$/);
+  match = note.match(/^达到(\d+)格，传送到(.+)顶端$/);
   if (match) {
-    return `Crossed the midpoint and teleported to the top of ${translateKnownNames(match[1], language)}`;
+    return `Reached tile ${match[1]} and teleported to the top of ${translateKnownNames(match[2], language)}`;
   }
   match = note.match(/^行动前已到(.+)后方，先传送回起终点$/);
   if (match) {

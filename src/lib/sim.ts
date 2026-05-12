@@ -513,10 +513,11 @@ export class Race {
   private prepareRoundRolls(actionOrder: string[]): void {
     this.currentRoundRolls = {};
     for (const actorId of actionOrder) {
-      if (actorId === BUDDAWANG_ID || this.finishedSet.has(actorId)) {
+      if (this.finishedSet.has(actorId)) {
         continue;
       }
-      this.currentRoundRolls[actorId] = this.rollForRacer(actorId);
+      this.currentRoundRolls[actorId] =
+        actorId === BUDDAWANG_ID ? this.rollBudawang() : this.rollForRacer(actorId);
     }
   }
 
@@ -611,7 +612,7 @@ export class Race {
       ? this.stationaryRacerMove(racerId)
       : this.moveRacerStack(racerId, steps, racerId);
     if (!skipMovement && skillType === "midpoint_nearest_ahead_teleport_once") {
-      const teleport = this.applyMidpointTeleportIfNeeded(racerId, move.movers, move.from_position);
+      const teleport = this.applyThresholdTeleportIfNeeded(racerId, move.movers);
       if (teleport) {
         if (teleport.note) {
           notes.push(String(teleport.note));
@@ -728,7 +729,7 @@ export class Race {
     }
 
     const fromPosition = this.budawangPosition;
-    const steps = this.rollBudawang();
+    const steps = this.currentRoundRolls[BUDDAWANG_ID] ?? this.rollBudawang();
     const delta = steps * Number(this.assumptions.budawang_direction);
     const [pathPositions, targetPosition] = this.budawangPathTo(fromPosition + delta);
     const move = this.moveBudawang(delta);
@@ -784,30 +785,29 @@ export class Race {
     };
   }
 
-  private applyMidpointTeleportIfNeeded(
+  private applyThresholdTeleportIfNeeded(
     racerId: string,
     movers: string[],
-    fromPosition: number,
   ): Record<string, unknown> | null {
     if (this.midpointTeleportTriggered[racerId] || this.finishedSet.has(racerId)) {
       return null;
     }
+    const skill = this.racers[racerId]?.skill ?? {};
     const toPosition = this.positions[racerId];
-    const midpoint = this.length / 2;
-    if (fromPosition > midpoint || toPosition <= midpoint) {
+    const triggerPosition = Math.max(
+      0,
+      Math.min(this.length, Math.trunc(asNumber(skill.trigger_position, Math.ceil(this.length / 2)))),
+    );
+    if (toPosition < triggerPosition) {
+      return null;
+    }
+
+    const targetRacer = this.nearestRacerAhead(racerId, movers);
+    if (!targetRacer) {
       return null;
     }
 
     this.midpointTeleportTriggered[racerId] = true;
-    const targetRacer = this.nearestRacerAhead(racerId, movers);
-    if (!targetRacer) {
-      return {
-        midpoint_teleport_triggered: true,
-        teleported: false,
-        note: "越过中点，前方无可传送目标",
-      };
-    }
-
     const targetPosition = this.positions[targetRacer];
     const activeMovers = movers.filter(
       (mover) => this.racerIds.includes(mover) && !this.finishedSet.has(mover),
@@ -824,9 +824,10 @@ export class Race {
       midpoint_teleport_triggered: true,
       teleported: true,
       teleport_target: targetRacer,
+      teleport_trigger_position: triggerPosition,
       teleport_to_position: targetPosition,
       to_position: targetPosition,
-      note: `越过中点，传送到${this.racers[targetRacer].name}顶端`,
+      note: `达到${triggerPosition}格，传送到${this.racers[targetRacer].name}顶端`,
     };
   }
 
@@ -1877,7 +1878,7 @@ export function skillLabel(skill: SkillConfig = { type: "none" }): string {
     round_min_roll_bonus: "最低点加速",
     fixed_roll_cycle: "固定循环骰",
     chance_double_or_skip: "双倍/停步",
-    midpoint_nearest_ahead_teleport_once: "中点传送",
+    midpoint_nearest_ahead_teleport_once: "达标传送",
     restricted_roll: "限定骰点",
     chance_double_roll: "概率双倍",
   };

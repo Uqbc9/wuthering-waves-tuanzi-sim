@@ -141,6 +141,44 @@ describe("browser simulator", () => {
     expect(turn?.notes).toContain("本轮最低点 +2");
   });
 
+  it("counts Budawang's roll for Chisaki's round-minimum skill after Budawang joins", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [2];
+    config.special_units = {
+      ...config.special_units,
+      budawang: {
+        ...config.special_units?.budawang,
+        dice_sides: [1],
+      },
+    };
+    config.matches = [
+      {
+        id: "chisaki_budawang_minimum",
+        name: "千咲布大王最低点测试",
+        type: "single_race",
+        racers: ["chisaki"],
+        initial_state: {
+          positions: { chisaki: 0, [BUDDAWANG_ID]: 20 },
+          stacks: { "0": ["chisaki"], "20": [BUDDAWANG_ID] },
+          budawang: { active: true, position: 20 },
+        },
+      },
+    ];
+
+    const trace = traceSingleRace(config, "chisaki_budawang_minimum", 20260510);
+    const roundOrder = trace.timeline.find(
+      (step) => step.event_type === "round_order" && step.round_no === 1,
+    );
+    const turn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "chisaki",
+    );
+
+    expect(roundOrder?.round_rolls).toMatchObject({ chisaki: 2, [BUDDAWANG_ID]: 1 });
+    expect(turn?.roll).toBe(2);
+    expect(turn?.steps).toBe(2);
+    expect(turn?.notes).not.toContain("本轮最低点 +2");
+  });
+
   it("does not let Siglica mark racers before anyone has moved from the start", () => {
     const config = cloneConfig();
     config.assumptions.dice_sides = [2];
@@ -234,15 +272,15 @@ describe("browser simulator", () => {
     expect(carllottaTurn?.to_position).toBe(4);
   });
 
-  it("teleports Aemis to the nearest racer ahead after passing the midpoint", () => {
+  it("teleports Aemis to the nearest racer ahead after ending at tile 15 or above", () => {
     const config = cloneConfig();
-    config.assumptions.dice_sides = [2];
+    config.assumptions.dice_sides = [1];
     const trace = traceManualRace(
       config,
       {
         lap_mode: "first",
         racers: ["aemis", "augusta"],
-        positions: { aemis: 15, augusta: 20 },
+        positions: { aemis: 14, augusta: 16 },
         stack_order: ["aemis", "augusta"],
       },
       20260510,
@@ -252,7 +290,56 @@ describe("browser simulator", () => {
     );
     const teleportPosition = Number(turn?.teleport_to_position);
     expect(turn?.teleported).toBe(true);
+    expect(turn?.teleport_trigger_position).toBe(15);
     expect(turn?.to_position).toBe(teleportPosition);
     expect(turn?.stacks[String(teleportPosition)]?.at(-1)).toBe("aemis");
+  });
+
+  it("does not consume Aemis teleport when no racer is ahead", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    setRacerSkill(config, "augusta", {
+      type: "fixed_roll_cycle",
+      sequence: [3],
+    });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["aemis", "augusta"],
+        positions: { aemis: 14, augusta: 12 },
+        stack_order: ["aemis", "augusta"],
+      },
+      2,
+    );
+    const aemisTurns = trace.timeline.filter(
+      (step) => step.event_type === "racer_turn" && step.actor === "aemis",
+    );
+    expect(aemisTurns[0]?.to_position).toBe(15);
+    expect(aemisTurns[0]?.teleported).toBeUndefined();
+    expect(aemisTurns[0]?.midpoint_teleport_triggered).toBeUndefined();
+    expect(aemisTurns[1]?.teleported).toBe(true);
+  });
+
+  it("does not trigger Aemis teleport when another racer carries Aemis", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["augusta", "aemis", "hiyuki"],
+        positions: { augusta: 14, aemis: 14, hiyuki: 20 },
+        stack_order: ["aemis", "augusta", "hiyuki"],
+      },
+      20260510,
+    );
+    const augustaTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "augusta",
+    );
+    expect(augustaTurn?.movers).toContain("aemis");
+    expect(augustaTurn?.to_position).toBe(15);
+    expect(augustaTurn?.teleported).toBeUndefined();
+    expect(augustaTurn?.midpoint_teleport_triggered).toBeUndefined();
   });
 });

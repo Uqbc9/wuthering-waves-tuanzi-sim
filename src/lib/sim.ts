@@ -21,6 +21,19 @@ const ROUND_START_MARK_SKILLS = new Set([
   "mark_higher_neighbors_after_roll",
   "mark_higher_neighbors_round_start",
 ]);
+const MIDPOINT_TELEPORT_SKILLS = new Set([
+  "midpoint_nearest_ahead_teleport_once",
+  "midpoint_adjacent_rank_teleport_once",
+]);
+const TRIGGER_ONCE_REFRESH_AT_NEXT_FINISH_SKILLS = new Set([
+  ...MIDPOINT_TELEPORT_SKILLS,
+  "last_place_comeback",
+]);
+const ROUND_START_STACK_SKILLS = new Set([
+  "top_skip_next_round_last",
+  "round_start_bottom_bonus",
+  "below_stack_chance_next_round_last",
+]);
 
 type Racer = {
   id: string;
@@ -29,6 +42,10 @@ type Racer = {
 };
 
 type ProgressCallback = (completedRuns: number, totalRuns: number) => void;
+
+function skillTypeOf(skill: SkillConfig | undefined): string {
+  return String(skill?.type ?? "none");
+}
 
 function asNumber(value: unknown, fallback = 0): number {
   const numeric = Number(value);
@@ -190,7 +207,11 @@ export class Race {
   private currentRoundRolls: Record<string, number> = {};
   private fixedRollCycleIndexes: Record<string, number>;
   private midpointTeleportTriggered: Record<string, boolean>;
+  private lapTriggerOnceRefreshPending: Record<string, boolean>;
   private siglicaPenalties: Record<string, number> = {};
+  private currentRoundSkippedRacers = new Set<string>();
+  private roundStartStepBonuses: Record<string, number> = {};
+  private nextRoundLastActionRacers = new Set<string>();
   private hiyukiMetBudawang = false;
   private cartethyiaTriggered = false;
   private cartethyiaActive = false;
@@ -232,6 +253,9 @@ export class Race {
     this.midpointTeleportTriggered = Object.fromEntries(
       this.racerIds.map((racerId) => [racerId, false]),
     );
+    this.lapTriggerOnceRefreshPending = Object.fromEntries(
+      this.racerIds.map((racerId) => [racerId, false]),
+    );
     this.budawangPosition = this.length;
     this.applyInitialState(initialState);
   }
@@ -255,11 +279,16 @@ export class Race {
 
     for (let roundNo = 1; roundNo <= this.maxRounds; roundNo += 1) {
       this.siglicaPenalties = {};
+      this.currentRoundSkippedRacers = new Set();
+      this.roundStartStepBonuses = {};
+      const forcedLastAction = new Set(this.nextRoundLastActionRacers);
+      this.nextRoundLastActionRacers = new Set();
       this.budawangPendingRoundEndTeleport = false;
       const roundNotes: string[] = [];
       const skipOpeningStartMarks =
         this.isNeutralOpeningRound(roundNo) && this.hasActiveRoundStartMarkSkill();
       const marked = skipOpeningStartMarks ? [] : this.applyRoundStartMarks();
+      roundNotes.push(...this.applyRoundStartStackSkills(roundNo));
       if (skipOpeningStartMarks) {
         roundNotes.push("首轮同在起点，暂无前后顺序，西格莉卡不标记");
       }
@@ -269,7 +298,10 @@ export class Race {
 
       const budawangInOrder =
         this.budawangActive || roundNo >= Number(this.assumptions.budawang_starts_on_round);
-      const actionOrder = this.randomRoundOrder(budawangInOrder);
+      const actionOrder = this.applyLastActionOrder(
+        this.randomRoundOrder(budawangInOrder),
+        forcedLastAction,
+      );
       this.prepareRoundRolls(actionOrder);
       roundOrders.push(actionOrder);
       this.recordState(`第${roundNo}轮 行动顺序`, "round_order", {
@@ -330,6 +362,17 @@ export class Race {
     return this.rng.shuffle(actionOrder);
   }
 
+  private applyLastActionOrder(actionOrder: string[], forcedLastAction: Set<string>): string[] {
+    const lastActors = actionOrder.filter((actorId) => forcedLastAction.has(actorId));
+    if (lastActors.length === 0) {
+      return actionOrder;
+    }
+    return [
+      ...actionOrder.filter((actorId) => !forcedLastAction.has(actorId)),
+      ...lastActors,
+    ];
+  }
+
   private buildMechanismMap(): Record<number, string> {
     const result: Record<number, string> = {};
     this.config.track.sequence.forEach((item, position) => {
@@ -368,9 +411,7 @@ export class Race {
   private boardPositionForRacer(racerId: string): number {
     const coordinate = this.startCoordinates[racerId] + this.distanceTraveled[racerId];
     const preferFinish =
-      this.lapFinishMode ||
-      this.positions[racerId] === this.length ||
-      this.distanceTraveled[racerId] > 0;
+      this.positions[racerId] === this.length || this.distanceTraveled[racerId] > 0;
     return this.positionForCoordinate(coordinate, preferFinish);
   }
 
@@ -500,6 +541,65 @@ export class Race {
         this.previousRoll[racerId] = roll === null ? null : Math.trunc(asNumber(roll));
       }
     }
+    for (const racerId of this.racerIds) {
+      this.configureLapTriggerOnceRefresh(racerId);
+    }
+  }
+
+  private resetTriggerOnceSkillState(racerId: string): void {
+    const skillType = skillTypeOf(this.racers[racerId]?.skill);
+    if (MIDPOINT_TELEPORT_SKILLS.has(skillType)) {
+      this.midpointTeleportTriggered[racerId] = false;
+      return;
+    }
+    if (skillType === "last_place_comeback") {
+      this.cartethyiaTriggered = false;
+      this.cartethyiaActive = false;
+    }
+  }
+
+  private triggerOnceSkillConsumed(racerId: string): boolean {
+    const skillType = skillTypeOf(this.racers[racerId]?.skill);
+    if (MIDPOINT_TELEPORT_SKILLS.has(skillType)) {
+      return Boolean(this.midpointTeleportTriggered[racerId]);
+    }
+    if (skillType === "last_place_comeback") {
+      return this.cartethyiaTriggered || this.cartethyiaActive;
+    }
+    return false;
+  }
+
+  private configureLapTriggerOnceRefresh(racerId: string): void {
+    const skillType = skillTypeOf(this.racers[racerId]?.skill);
+    if (!this.lapFinishMode || !TRIGGER_ONCE_REFRESH_AT_NEXT_FINISH_SKILLS.has(skillType)) {
+      this.lapTriggerOnceRefreshPending[racerId] = false;
+      return;
+    }
+    if (this.positions[racerId] === this.length) {
+      this.resetTriggerOnceSkillState(racerId);
+      this.lapTriggerOnceRefreshPending[racerId] = false;
+      return;
+    }
+    this.lapTriggerOnceRefreshPending[racerId] = this.triggerOnceSkillConsumed(racerId);
+  }
+
+  private refreshTriggerOnceSkillAfterNextFinishIfNeeded(
+    racerId: string,
+    previousDistance: number,
+  ): void {
+    if (!this.lapTriggerOnceRefreshPending[racerId]) {
+      return;
+    }
+    const refreshDistance = this.finishDistance[racerId] - this.length;
+    if (
+      refreshDistance <= 0 ||
+      previousDistance >= refreshDistance ||
+      this.distanceTraveled[racerId] < refreshDistance
+    ) {
+      return;
+    }
+    this.resetTriggerOnceSkillState(racerId);
+    this.lapTriggerOnceRefreshPending[racerId] = false;
   }
 
   private roll(): number {
@@ -513,7 +613,7 @@ export class Race {
   private prepareRoundRolls(actionOrder: string[]): void {
     this.currentRoundRolls = {};
     for (const actorId of actionOrder) {
-      if (this.finishedSet.has(actorId)) {
+      if (this.finishedSet.has(actorId) || this.currentRoundSkippedRacers.has(actorId)) {
         continue;
       }
       this.currentRoundRolls[actorId] =
@@ -548,17 +648,56 @@ export class Race {
   }
 
   private takeRacerTurn(racerId: string): Record<string, unknown> {
-    const roll = this.currentRoundRolls[racerId] ?? this.rollForRacer(racerId);
     const skill = this.racers[racerId].skill;
     const skillType = String(skill.type ?? "none");
     const notes: string[] = [];
     const extraMeta: Record<string, unknown> = {};
 
+    if (this.currentRoundSkippedRacers.has(racerId)) {
+      const move = this.stationaryRacerMove(racerId);
+      notes.push("轮初位于顶端，本回合不行动");
+      return {
+        actor: racerId,
+        roll: null,
+        steps: 0,
+        movers: move.movers,
+        from_position: move.from_position,
+        target_position: move.target_position,
+        to_position: move.to_position,
+        skipped_by_skill: true,
+        notes,
+      };
+    }
+
+    const roll = this.currentRoundRolls[racerId] ?? this.rollForRacer(racerId);
     const penalty = Math.trunc(this.siglicaPenalties[racerId] ?? 0);
     let steps = Math.max(1, roll + penalty);
     let skipMovement = false;
     if (penalty) {
       notes.push(`标记影响 ${penalty >= 0 ? "+" : ""}${penalty}`);
+    }
+
+    if (
+      skillType === "above_stack_chance_to_top" &&
+      this.hasStackedAbove(racerId) &&
+      this.rng.random() < asNumber(skill.probability)
+    ) {
+      this.moveRacerToTopOfStack(racerId);
+      notes.push("移至堆叠顶端");
+    }
+
+    if (skillType === "round_start_bottom_bonus") {
+      const bonus = Math.trunc(this.roundStartStepBonuses[racerId] ?? 0);
+      if (bonus !== 0) {
+        steps += bonus;
+        notes.push(`轮初底层 +${bonus}`);
+      }
+    }
+
+    if (skillType === "last_place_start_bonus" && this.isLastPlace(racerId)) {
+      const bonus = Math.trunc(asNumber(skill.bonus_steps));
+      steps += bonus;
+      notes.push(`末位起步 +${bonus}`);
     }
 
     if (skillType === "same_roll_bonus" && this.previousRoll[racerId] === roll) {
@@ -612,12 +751,31 @@ export class Race {
       ? this.stationaryRacerMove(racerId)
       : this.moveRacerStack(racerId, steps, racerId);
     if (!skipMovement && skillType === "midpoint_nearest_ahead_teleport_once") {
-      const teleport = this.applyThresholdTeleportIfNeeded(racerId, move.movers);
+      const finalMovePosition = move.to_position;
+      const teleport = this.applyThresholdTeleportIfNeeded(
+        racerId,
+        move.movers,
+        finalMovePosition,
+      );
       if (teleport) {
         if (teleport.note) {
           notes.push(String(teleport.note));
         }
         move.to_position = Number(teleport.to_position ?? move.to_position);
+        Object.assign(extraMeta, teleport);
+        delete extraMeta.note;
+      }
+    }
+    if (!skipMovement) {
+      const teleport = this.applyMovedRacerMidpointSkills(
+        move.movers,
+        move.from_position,
+        move.target_position,
+      );
+      if (teleport) {
+        if (teleport.note) {
+          notes.push(String(teleport.note));
+        }
         Object.assign(extraMeta, teleport);
         delete extraMeta.note;
       }
@@ -696,6 +854,126 @@ export class Race {
       this.siglicaPenalties[targetId] = (this.siglicaPenalties[targetId] ?? 0) + stepDelta;
     }
     return higher;
+  }
+
+  private applyRoundStartStackSkills(roundNo: number): string[] {
+    const notes: string[] = [];
+    if (this.isNeutralOpeningRound(roundNo) && this.hasActiveRoundStartStackSkill()) {
+      return ["首轮同在起点，暂无堆叠前后，轮初堆叠技能不触发"];
+    }
+    for (const racerId of this.racerIds) {
+      if (this.finishedSet.has(racerId)) {
+        continue;
+      }
+      const skill = this.racers[racerId].skill;
+      const skillType = String(skill.type ?? "none");
+      const racerName = this.racers[racerId].name;
+
+      if (skillType === "top_skip_next_round_last" && this.isStackTop(racerId)) {
+        this.currentRoundSkippedRacers.add(racerId);
+        this.nextRoundLastActionRacers.add(racerId);
+        notes.push(`${racerName}位于顶端，本回合不行动，下回合最后行动`);
+      } else if (skillType === "round_start_bottom_bonus" && this.isStackBottom(racerId)) {
+        const bonus = Math.trunc(asNumber(skill.bonus_steps));
+        if (bonus !== 0) {
+          this.roundStartStepBonuses[racerId] = (this.roundStartStepBonuses[racerId] ?? 0) + bonus;
+          notes.push(`${racerName}位于底层，移动 +${bonus}`);
+        }
+      } else if (
+        skillType === "below_stack_chance_next_round_last" &&
+        this.hasStackedBelow(racerId) &&
+        this.rng.random() < asNumber(skill.probability)
+      ) {
+        this.nextRoundLastActionRacers.add(racerId);
+        notes.push(`${racerName}下方有堆叠，下回合最后行动`);
+      }
+    }
+    return notes;
+  }
+
+  private hasActiveRoundStartStackSkill(): boolean {
+    return this.racerIds.some((racerId) => {
+      if (this.finishedSet.has(racerId)) {
+        return false;
+      }
+      const skill = this.racers[racerId].skill;
+      return ROUND_START_STACK_SKILLS.has(String(skill.type ?? "none"));
+    });
+  }
+
+  private isNeutralStartTile(position: number): boolean {
+    return !this.lapFinishMode && position === 0;
+  }
+
+  private stackedUnitsAt(position: number): string[] {
+    return (this.stacks[position] ?? []).filter(
+      (unitId) =>
+        unitId === BUDDAWANG_ID ||
+        (this.racerIds.includes(unitId) && !this.finishedSet.has(unitId)),
+    );
+  }
+
+  private stackForRacer(racerId: string): string[] {
+    return this.stackedUnitsAt(this.positions[racerId]);
+  }
+
+  private isStackTop(racerId: string): boolean {
+    if (this.isNeutralStartTile(this.positions[racerId])) {
+      return false;
+    }
+    const stack = this.stackForRacer(racerId);
+    return stack.length > 1 && stack[stack.length - 1] === racerId;
+  }
+
+  private isStackBottom(racerId: string): boolean {
+    if (this.isNeutralStartTile(this.positions[racerId])) {
+      return false;
+    }
+    const stack = this.stackForRacer(racerId);
+    return stack.length > 1 && stack[0] === racerId;
+  }
+
+  private hasStackedBelow(racerId: string): boolean {
+    if (this.isNeutralStartTile(this.positions[racerId])) {
+      return false;
+    }
+    const stack = this.stackForRacer(racerId);
+    const index = stack.indexOf(racerId);
+    return index > 0;
+  }
+
+  private hasStackedAbove(racerId: string): boolean {
+    if (this.isNeutralStartTile(this.positions[racerId])) {
+      return false;
+    }
+    const stack = this.stackForRacer(racerId);
+    const index = stack.indexOf(racerId);
+    return index >= 0 && index < stack.length - 1;
+  }
+
+  private moveRacerToTopOfStack(racerId: string): void {
+    const position = this.positions[racerId];
+    const stack = this.stacks[position] ?? [];
+    if (!stack.includes(racerId)) {
+      return;
+    }
+    this.stacks[position] = [...stack.filter((unitId) => unitId !== racerId), racerId];
+  }
+
+  private isLastPlace(racerId: string): boolean {
+    if (
+      this.isNeutralStartTile(this.positions[racerId]) &&
+      this.racerIds.some(
+        (otherId) =>
+          otherId !== racerId &&
+          !this.finishedSet.has(otherId) &&
+          this.positions[otherId] === this.positions[racerId],
+      )
+    ) {
+      return false;
+    }
+    const ranking = this.currentRanking().filter((id) => !this.finishedSet.has(id));
+    return ranking[ranking.length - 1] === racerId;
   }
 
   private takeBudawangTurn(roundNo: number): Record<string, unknown> {
@@ -788,17 +1066,17 @@ export class Race {
   private applyThresholdTeleportIfNeeded(
     racerId: string,
     movers: string[],
+    finalMovePosition: number,
   ): Record<string, unknown> | null {
     if (this.midpointTeleportTriggered[racerId] || this.finishedSet.has(racerId)) {
       return null;
     }
     const skill = this.racers[racerId]?.skill ?? {};
-    const toPosition = this.positions[racerId];
     const triggerPosition = Math.max(
       0,
       Math.min(this.length, Math.trunc(asNumber(skill.trigger_position, Math.ceil(this.length / 2)))),
     );
-    if (toPosition < triggerPosition) {
+    if (finalMovePosition <= triggerPosition) {
       return null;
     }
 
@@ -809,11 +1087,13 @@ export class Race {
 
     this.midpointTeleportTriggered[racerId] = true;
     const targetPosition = this.positions[targetRacer];
-    const activeMovers = movers.filter(
-      (mover) => this.racerIds.includes(mover) && !this.finishedSet.has(mover),
-    );
+    const targetProgress = this.lapFinishMode ? this.lapProgressScore(targetRacer) : null;
+    const activeMovers = [racerId];
     this.detachFromStack(activeMovers);
     for (const mover of activeMovers) {
+      if (targetProgress !== null) {
+        this.distanceTraveled[mover] = Math.max(0, targetProgress + this.finishDistance[mover]);
+      }
       this.positions[mover] = targetPosition;
     }
     this.stacks[targetPosition] = this.stacks[targetPosition] ?? [];
@@ -824,11 +1104,124 @@ export class Race {
       midpoint_teleport_triggered: true,
       teleported: true,
       teleport_target: targetRacer,
+      teleport_from_position: finalMovePosition,
       teleport_trigger_position: triggerPosition,
       teleport_to_position: targetPosition,
       to_position: targetPosition,
-      note: `达到${triggerPosition}格，传送到${this.racers[targetRacer].name}顶端`,
+      note: `超过${triggerPosition}格，传送到${this.racers[targetRacer].name}顶端`,
     };
+  }
+
+  private applyMovedRacerMidpointSkills(
+    movers: string[],
+    fromPosition: number,
+    targetPosition: number,
+  ): Record<string, unknown> | null {
+    for (const mover of movers) {
+      if (!this.racerIds.includes(mover) || this.finishedSet.has(mover)) {
+        continue;
+      }
+      const skill = this.racers[mover]?.skill ?? {};
+      if (String(skill.type ?? "none") !== "midpoint_adjacent_rank_teleport_once") {
+        continue;
+      }
+      const teleport = this.applyAdjacentRankTeleportIfNeeded(mover, fromPosition, targetPosition);
+      if (teleport) {
+        return teleport;
+      }
+    }
+    return null;
+  }
+
+  private applyAdjacentRankTeleportIfNeeded(
+    racerId: string,
+    fromPosition: number,
+    targetPosition: number,
+  ): Record<string, unknown> | null {
+    if (this.midpointTeleportTriggered[racerId] || this.finishedSet.has(racerId)) {
+      return null;
+    }
+    const skill = this.racers[racerId]?.skill ?? {};
+    const triggerPosition = Math.max(
+      0,
+      Math.min(this.length, Math.trunc(asNumber(skill.trigger_position, Math.ceil(this.length / 2)))),
+    );
+    const reachedPosition = Math.max(this.positions[racerId] ?? 0, targetPosition);
+    if (fromPosition >= triggerPosition || reachedPosition < triggerPosition) {
+      return null;
+    }
+
+    const rankingBefore = this.currentRanking().filter((id) => !this.finishedSet.has(id));
+    const ownRank = rankingBefore.indexOf(racerId);
+    if (ownRank < 0) {
+      return null;
+    }
+    const targetIds = [rankingBefore[ownRank - 1], rankingBefore[ownRank + 1]].filter(
+      (id): id is string => typeof id === "string" && id !== racerId,
+    );
+    if (targetIds.length === 0) {
+      return null;
+    }
+
+    this.midpointTeleportTriggered[racerId] = true;
+    const teleportPosition = this.positions[racerId];
+    const teleportProgress = this.lapFinishMode ? this.lapProgressScore(racerId) : null;
+    const rankIndex = new Map(rankingBefore.map((id, index) => [id, index]));
+    const rankingOrder = [...targetIds].sort(
+      (left, right) => (rankIndex.get(left) ?? 0) - (rankIndex.get(right) ?? 0),
+    );
+    const stackOrder = (ids: string[]) =>
+      [...ids].sort((left, right) => (rankIndex.get(right) ?? 0) - (rankIndex.get(left) ?? 0));
+    const aboveTargets = rankingOrder.filter((id) => (rankIndex.get(id) ?? 0) < ownRank);
+    const belowTargets = rankingOrder.filter((id) => (rankIndex.get(id) ?? 0) > ownRank);
+
+    this.detachRacersFromStacks(rankingOrder);
+    for (const targetId of rankingOrder) {
+      if (teleportProgress !== null) {
+        this.distanceTraveled[targetId] = Math.max(
+          0,
+          teleportProgress + this.finishDistance[targetId],
+        );
+      }
+      this.positions[targetId] = teleportPosition;
+    }
+
+    const stack = (this.stacks[teleportPosition] = this.stacks[teleportPosition] ?? []);
+    if (!stack.includes(racerId)) {
+      stack.push(racerId);
+    }
+    const ownStackIndex = stack.indexOf(racerId);
+    this.stacks[teleportPosition] = [
+      ...stack.slice(0, ownStackIndex),
+      ...stackOrder(belowTargets),
+      racerId,
+      ...stackOrder(aboveTargets),
+      ...stack.slice(ownStackIndex + 1),
+    ];
+    this.normalizeBudawangStack(teleportPosition);
+
+    return {
+      midpoint_teleport_triggered: true,
+      adjacent_rank_teleport_triggered: true,
+      teleport_actor: racerId,
+      teleported_racers: rankingOrder,
+      teleport_trigger_position: triggerPosition,
+      teleport_to_position: teleportPosition,
+      note: `经过${triggerPosition}格，传送${rankingOrder
+        .map((id) => this.racers[id].name)
+        .join("、")}至自身格子`,
+    };
+  }
+
+  private detachRacersFromStacks(racerIds: string[]): void {
+    const detached = new Set(racerIds);
+    for (const [rawPosition, stack] of Object.entries(this.stacks)) {
+      const position = Number(rawPosition);
+      this.stacks[position] = stack.filter((unitId) => !detached.has(unitId));
+      if (this.stacks[position].length === 0) {
+        delete this.stacks[position];
+      }
+    }
   }
 
   private nearestRacerAhead(racerId: string, excludedRacers: string[]): string | null {
@@ -837,11 +1230,11 @@ export class Race {
       (candidateId) => !excluded.has(candidateId) && !this.finishedSet.has(candidateId),
     );
     if (this.lapFinishMode) {
-      const activeProgress = this.distanceTraveled[racerId];
+      const activeProgress = this.lapProgressScore(racerId);
       const ahead = candidates
         .map((candidateId) => ({
           racerId: candidateId,
-          distance: this.distanceTraveled[candidateId] - activeProgress,
+          distance: this.lapProgressScore(candidateId) - activeProgress,
         }))
         .filter((candidate) => candidate.distance > 0)
         .sort((left, right) => left.distance - right.distance);
@@ -857,6 +1250,10 @@ export class Race {
       .filter((candidate) => candidate.distance > 0)
       .sort((left, right) => left.distance - right.distance);
     return ahead[0]?.racerId ?? null;
+  }
+
+  private lapProgressScore(racerId: string): number {
+    return this.distanceTraveled[racerId] - this.finishDistance[racerId];
   }
 
   private moveRacerStack(
@@ -925,7 +1322,9 @@ export class Race {
   }
 
   private advanceLapRacer(racerId: string, delta: number): boolean {
+    const previousDistance = this.distanceTraveled[racerId];
     this.distanceTraveled[racerId] += delta;
+    this.refreshTriggerOnceSkillAfterNextFinishIfNeeded(racerId, previousDistance);
     if (this.distanceTraveled[racerId] >= this.finishDistance[racerId]) {
       if (!this.finishedSet.has(racerId)) {
         this.finishedSet.add(racerId);
@@ -938,6 +1337,17 @@ export class Race {
     return false;
   }
 
+  private reorderLapFinishedMovers(movers: string[], finishedMovers: string[]): void {
+    if (finishedMovers.length <= 1) {
+      return;
+    }
+    const finishedSet = new Set(finishedMovers);
+    this.finished = [
+      ...this.finished.filter((racerId) => !finishedSet.has(racerId)),
+      ...[...movers].reverse().filter((racerId) => finishedSet.has(racerId)),
+    ];
+  }
+
   private placeMovingRacers(
     movers: string[],
     newPosition: number,
@@ -946,12 +1356,16 @@ export class Race {
   ): void {
     if (this.lapFinishMode) {
       const unfinishedMovers: string[] = [];
+      const finishedMovers: string[] = [];
       const delta = newPosition - this.positions[activeRacerId];
       for (const racerId of movers) {
-        if (!this.advanceLapRacer(racerId, delta)) {
+        if (this.advanceLapRacer(racerId, delta)) {
+          finishedMovers.push(racerId);
+        } else {
           unfinishedMovers.push(racerId);
         }
       }
+      this.reorderLapFinishedMovers(movers, finishedMovers);
       if (unfinishedMovers.length > 0) {
         const position = this.positions[unfinishedMovers[0]];
         for (const racerId of unfinishedMovers) {
@@ -1180,12 +1594,16 @@ export class Race {
     );
     if (this.lapFinishMode) {
       const unfinishedRacers: string[] = [];
+      const finishedRacers: string[] = [];
       for (const racerId of racerMovers) {
         const delta = this.signedTrackDelta(this.positions[racerId], this.budawangPosition, direction);
-        if (!this.advanceLapRacer(racerId, delta)) {
+        if (this.advanceLapRacer(racerId, delta)) {
+          finishedRacers.push(racerId);
+        } else {
           unfinishedRacers.push(racerId);
         }
       }
+      this.reorderLapFinishedMovers(racerMovers, finishedRacers);
       racerMovers = unfinishedRacers;
     }
 
@@ -1627,6 +2045,7 @@ export function simulateAggregate(
 
 export function buildManualMatch(config: TuanziConfig, setup: ManualRaceSetup): SingleRaceMatch {
   const knownRacers = new Set(config.racers.map((racer) => racer.id));
+  const racers = buildRacers(config);
   const selected: string[] = [];
   for (const racerId of setup.racers) {
     if (!knownRacers.has(racerId)) {
@@ -1692,6 +2111,19 @@ export function buildManualMatch(config: TuanziConfig, setup: ManualRaceSetup): 
   };
   if (setup.lap_mode === "second") {
     initialState.finish_rule = "one_lap_after_next_finish";
+    for (const racerId of selected) {
+      const position = positions[racerId];
+      if (position === 0 || position >= trackLength) {
+        continue;
+      }
+      const skillType = skillTypeOf(racers[racerId]?.skill);
+      if (MIDPOINT_TELEPORT_SKILLS.has(skillType)) {
+        initialState.state_flags![`${racerId}_midpoint_teleport_triggered`] = true;
+      } else if (skillType === "last_place_comeback") {
+        initialState.state_flags!.cartethyia_triggered = true;
+        initialState.state_flags!.cartethyia_active = false;
+      }
+    }
   }
   if (finished.length > 0) {
     initialState.finished = finished;
@@ -1865,22 +2297,31 @@ export function skillLabel(skill: SkillConfig = { type: "none" }): string {
   if (skillName) {
     return skillName;
   }
+  if (description) {
+    return description;
+  }
 
   const labels: Record<string, string> = {
     none: "无技能",
+    above_stack_chance_to_top: "概率登顶",
+    below_stack_chance_next_round_last: "压轴行动",
     tile_affinity: "机关亲和",
     mark_higher_neighbors_after_roll: "标记减速",
     mark_higher_neighbors_round_start: "轮初标记",
     same_roll_bonus: "同点加速",
     after_meeting_budawang_bonus: "遇王加速",
     last_place_comeback: "末位追赶",
+    last_place_start_bonus: "末位起步",
+    midpoint_adjacent_rank_teleport_once: "中点牵引",
     per_move_chance_bonus: "概率加速",
     round_min_roll_bonus: "最低点加速",
+    round_start_bottom_bonus: "底层加速",
     fixed_roll_cycle: "固定循环骰",
     chance_double_or_skip: "双倍/停步",
     midpoint_nearest_ahead_teleport_once: "达标传送",
     restricted_roll: "限定骰点",
     chance_double_roll: "概率双倍",
+    top_skip_next_round_last: "顶端停步",
   };
   return labels[String(skill.type ?? "none")] ?? String(skill.type ?? "none");
 }

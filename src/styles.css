@@ -376,6 +376,11 @@ h3 {
   padding: 8px;
 }
 
+.position-row.locked {
+  background: #f6f8f3;
+  border-color: #d9e1d8;
+}
+
 .position-name {
   min-width: 0;
   overflow: hidden;
@@ -401,6 +406,12 @@ h3 {
 .position-row input:focus {
   border-color: #1b8a8f;
   box-shadow: 0 0 0 3px rgba(27, 138, 143, 0.15);
+}
+
+.position-row input:disabled {
+  color: #5d6a61;
+  cursor: default;
+  opacity: 1;
 }
 
 .position-actions {

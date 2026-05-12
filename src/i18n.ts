@@ -42,6 +42,7 @@ const zhText = {
   playback: "赛局回放",
   playbackProgress: "回放进度",
   positionAria: "站位",
+  positionGuideFirstText: "第一圈固定全员 0，起点不判定堆叠前后；每轮行动顺序随机。",
   positionGuideText: "上方优先；起点/终点不判定前后。",
   positionGuideTitle: "站位与同格顺序",
   positionsList: "站位和同格顺序",
@@ -104,6 +105,7 @@ const enText: TextMap = {
   playback: "Race replay",
   playbackProgress: "Replay progress",
   positionAria: "position",
+  positionGuideFirstText: "First lap locks everyone at 0; start-tile stack order is neutral and action order is random.",
   positionGuideText: "Higher rows lead; start/finish tiles ignore same-tile order.",
   positionGuideTitle: "Positions and same-tile order",
   positionsList: "positions and same-tile order",
@@ -189,9 +191,17 @@ const mechanismLabels: Record<string, Record<Language, string>> = {
 };
 
 const skillLabels: Record<string, Record<Language, string>> = {
+  above_stack_chance_to_top: {
+    zh: "概率登顶",
+    en: "If another tuanzi is stacked above, has a 40% chance to move to the top of the stack before moving.",
+  },
   after_meeting_budawang_bonus: {
     zh: "遇王加速",
     en: "Guiding White Bird: after meeting Budawang, moves +1 extra each turn.",
+  },
+  below_stack_chance_next_round_last: {
+    zh: "压轴行动",
+    en: "If another tuanzi is stacked below, has a 65% chance to act last next round.",
   },
   chance_double_or_skip: {
     zh: "双倍/停步",
@@ -209,6 +219,10 @@ const skillLabels: Record<string, Record<Language, string>> = {
     zh: "末位追赶",
     en: "Comeback Arc: once per race, ending a move in last place enables a 60% chance for +2 on later turns.",
   },
+  last_place_start_bonus: {
+    zh: "末位起步",
+    en: "At the start of its move, if it is in last place, moves +3 extra.",
+  },
   mark_higher_neighbors_after_roll: {
     zh: "标记减速",
     en: "Sun Sprite, lend a hand: marks up to two nearby higher-ranked racers; marked racers move 1 fewer step.",
@@ -219,7 +233,11 @@ const skillLabels: Record<string, Record<Language, string>> = {
   },
   midpoint_nearest_ahead_teleport_once: {
     zh: "达标传送",
-    en: "Electronic Ghost: once per race after ending its own move at the trigger tile or beyond, teleports to the top of the nearest racer ahead.",
+    en: "Electronic Ghost: once per race after ending its own move beyond the trigger tile, teleports to the top of the nearest racer ahead; same-tile racers do not count.",
+  },
+  midpoint_adjacent_rank_teleport_once: {
+    zh: "中点牵引",
+    en: "Once per race after passing the midpoint, teleports the adjacent ranked racers to its tile in their prior rank order.",
   },
   none: { zh: "无技能", en: "No skill" },
   per_move_chance_bonus: {
@@ -231,6 +249,10 @@ const skillLabels: Record<string, Record<Language, string>> = {
     zh: "最低点加速",
     en: "Vision Release: if this roll is one of the lowest this round, moves +2 extra.",
   },
+  round_start_bottom_bonus: {
+    zh: "底层加速",
+    en: "At round start, if it is at the bottom of a stack, moves +3 extra on its move this round.",
+  },
   same_roll_bonus: {
     zh: "同点加速",
     en: "Good Things Come in Pairs: if the die matches the previous roll, moves +2 extra.",
@@ -238,6 +260,10 @@ const skillLabels: Record<string, Record<Language, string>> = {
   tile_affinity: {
     zh: "机关亲和",
     en: "Candy, Please: boost tiles add +3 extra; hindrance tiles add -1 extra.",
+  },
+  top_skip_next_round_last: {
+    zh: "顶端停步",
+    en: "At round start, if it is on top of a stack, skips this round and acts last next round.",
   },
 };
 
@@ -294,6 +320,9 @@ export function skillDisplayText(
     }
     if (skillName) {
       return skillName;
+    }
+    if (description) {
+      return description;
     }
   }
   return skillLabels[skillType]?.[language] ?? skillType;
@@ -394,6 +423,8 @@ export function translateTimelineNote(note: string, language: Language): string 
     "本步无特殊结算": "No special resolution on this step",
     "第3轮起布大王加入行动顺序": "Budawang joins the action order from round 3",
     "每轮随机行动；西格莉卡轮初标记": "Random action order each round; Siglica marks at round start",
+    "轮初位于顶端，本回合不行动": "Started the round on top of a stack and skips this turn",
+    "移至堆叠顶端": "Moved to the top of the stack",
     "首轮同在起点，暂无前后顺序，西格莉卡不标记":
       "All racers start together, so Siglica does not mark anyone in round 1",
     "所有团子需先到下一次起终点，再完整跑一圈到起终点":
@@ -428,6 +459,14 @@ export function translateTimelineNote(note: string, language: Language): string 
   if (match) {
     return `Lowest roll this round +${match[1]}`;
   }
+  match = note.match(/^轮初底层 \+(\d+)$/);
+  if (match) {
+    return `Started the round at the bottom +${match[1]}`;
+  }
+  match = note.match(/^末位起步 \+(\d+)$/);
+  if (match) {
+    return `Started the move in last place +${match[1]}`;
+  }
   match = note.match(/^从(.+)接续$/);
   if (match) {
     return `Continues from ${translateKnownNames(match[1], language)}`;
@@ -443,6 +482,26 @@ export function translateTimelineNote(note: string, language: Language): string 
   match = note.match(/^达到(\d+)格，传送到(.+)顶端$/);
   if (match) {
     return `Reached tile ${match[1]} and teleported to the top of ${translateKnownNames(match[2], language)}`;
+  }
+  match = note.match(/^超过(\d+)格，传送到(.+)顶端$/);
+  if (match) {
+    return `Moved beyond tile ${match[1]} and teleported to the top of ${translateKnownNames(match[2], language)}`;
+  }
+  match = note.match(/^经过(\d+)格，传送(.+)至自身格子$/);
+  if (match) {
+    return `Passed tile ${match[1]} and teleported ${translateNameList(match[2], language)} to its tile`;
+  }
+  match = note.match(/^(.+)位于顶端，本回合不行动，下回合最后行动$/);
+  if (match) {
+    return `${translateKnownNames(match[1], language)} is on top, skips this round, and acts last next round`;
+  }
+  match = note.match(/^(.+)位于底层，移动 \+(\d+)$/);
+  if (match) {
+    return `${translateKnownNames(match[1], language)} is at the bottom and moves +${match[2]}`;
+  }
+  match = note.match(/^(.+)下方有堆叠，下回合最后行动$/);
+  if (match) {
+    return `${translateKnownNames(match[1], language)} has a stack below and acts last next round`;
   }
   match = note.match(/^行动前已到(.+)后方，先传送回起终点$/);
   if (match) {

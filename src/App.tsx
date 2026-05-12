@@ -169,9 +169,14 @@ export default function App() {
   const activeRequestRef = useRef<string>("");
   const copy = text[language];
   const racers = useMemo(() => racerById(defaultConfig), []);
+  const firstLapLocked = lapMode === "first";
+  const canonicalSelectedRacers = useMemo(
+    () => allRacers.filter((racer) => selectedRacerIds.includes(racer.id)).map((racer) => racer.id),
+    [selectedRacerIds],
+  );
   const orderedSelectedRacers = useMemo(
-    () => reconcileRacerOrder(stackOrder, selectedRacerIds),
-    [selectedRacerIds, stackOrder],
+    () => (firstLapLocked ? canonicalSelectedRacers : reconcileRacerOrder(stackOrder, selectedRacerIds)),
+    [canonicalSelectedRacers, firstLapLocked, selectedRacerIds, stackOrder],
   );
   const selectedGroupLabel = useMemo(() => {
     const groups = [
@@ -188,11 +193,14 @@ export default function App() {
       lap_mode: lapMode,
       racers: orderedSelectedRacers,
       positions: Object.fromEntries(
-        orderedSelectedRacers.map((racerId) => [racerId, clampPosition(positions[racerId])]),
+        orderedSelectedRacers.map((racerId) => [
+          racerId,
+          firstLapLocked ? 0 : clampPosition(positions[racerId]),
+        ]),
       ),
       stack_order: orderedSelectedRacers,
     }),
-    [lapMode, orderedSelectedRacers, positions],
+    [firstLapLocked, lapMode, orderedSelectedRacers, positions],
   );
 
   useEffect(() => {
@@ -219,7 +227,9 @@ export default function App() {
     url.searchParams.set("racers", orderedSelectedRacers.join(","));
     url.searchParams.set(
       "positions",
-      orderedSelectedRacers.map((racerId) => `${racerId}:${clampPosition(positions[racerId])}`).join(","),
+      orderedSelectedRacers
+        .map((racerId) => `${racerId}:${firstLapLocked ? 0 : clampPosition(positions[racerId])}`)
+        .join(","),
     );
     url.searchParams.set("order", orderedSelectedRacers.join(","));
     if (seed.trim()) {
@@ -446,7 +456,7 @@ export default function App() {
 
           <div className="position-guide">
             <strong>{copy.positionGuideTitle}</strong>
-            <span>{copy.positionGuideText}</span>
+            <span>{firstLapLocked ? copy.positionGuideFirstText : copy.positionGuideText}</span>
           </div>
 
           <div className="position-list" aria-label={copy.positionsList}>
@@ -455,7 +465,7 @@ export default function App() {
               const racerName = racerDisplayName(racer ?? racerId, language);
               const skillText = skillDisplayText(racer?.skill, language);
               return (
-                <div key={racerId} className="position-row">
+                <div key={racerId} className={firstLapLocked ? "position-row locked" : "position-row"}>
                   <span className="position-name" title={skillText}>
                     {racerName}
                   </span>
@@ -465,7 +475,8 @@ export default function App() {
                     min={0}
                     max={trackLength}
                     step={1}
-                    value={positions[racerId] ?? 0}
+                    value={firstLapLocked ? 0 : (positions[racerId] ?? 0)}
+                    disabled={firstLapLocked}
                     onChange={(event) => updateRacerPosition(racerId, event.target.value)}
                   />
                   <div className="position-actions">
@@ -473,7 +484,7 @@ export default function App() {
                       type="button"
                       className="mini-button"
                       onClick={() => moveStackOrder(racerId, -1)}
-                      disabled={index === 0}
+                      disabled={firstLapLocked || index === 0}
                       title={copy.moveUp}
                       aria-label={`${racerName} ${copy.moveUp}`}
                     >
@@ -483,7 +494,7 @@ export default function App() {
                       type="button"
                       className="mini-button"
                       onClick={() => moveStackOrder(racerId, 1)}
-                      disabled={index === orderedSelectedRacers.length - 1}
+                      disabled={firstLapLocked || index === orderedSelectedRacers.length - 1}
                       title={copy.moveDown}
                       aria-label={`${racerName} ${copy.moveDown}`}
                     >

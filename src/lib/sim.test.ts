@@ -71,6 +71,7 @@ describe("browser simulator", () => {
     };
     const match = buildManualMatch(defaultConfig, setup);
     expect(match.initial_state?.stacks?.["31"]).toEqual(["phoebe", "siglica"]);
+    expect(match.initial_state?.state_flags?.cartethyia_triggered).toBe(true);
 
     const result = simulateManualRace(defaultConfig, setup, 40, 20260510);
     expect(result.match_name).toBe("手动赛局");
@@ -79,6 +80,80 @@ describe("browser simulator", () => {
     const trace = traceManualRace(defaultConfig, setup, 20260510);
     expect(trace.timeline[0].progress?.denia.target).toBe(32);
     expect(trace.timeline[0].progress?.phoebe.target).toBe(33);
+  });
+
+  it("keeps second-lap racers at tile 0 when they restart from the shared start line", () => {
+    const trace = traceManualRace(
+      defaultConfig,
+      {
+        lap_mode: "second",
+        racers: ["augusta", "younuo", "florof"],
+        positions: { augusta: 0, younuo: 0, florof: 0 },
+        stack_order: ["augusta", "younuo", "florof"],
+      },
+      20260510,
+    );
+    expect(trace.timeline[0].positions.augusta).toBe(0);
+    expect(trace.timeline[0].positions.younuo).toBe(0);
+    expect(trace.timeline[0].positions.florof).toBe(0);
+    expect(trace.timeline[0].stacks["0"]).toEqual(["florof", "younuo", "augusta"]);
+    expect(trace.timeline[0].stacks["32"]).toBeUndefined();
+  });
+
+  it("ignores supplied first-lap start stack order for group C racers at tile 0", () => {
+    const setup = {
+      lap_mode: "first",
+      racers: ["augusta", "younuo", "florof", "changli", "jinhsi", "calcharo"],
+      positions: {
+        augusta: 0,
+        younuo: 0,
+        florof: 0,
+        changli: 0,
+        jinhsi: 0,
+        calcharo: 0,
+      },
+      stack_order: ["augusta", "younuo", "florof", "changli", "jinhsi", "calcharo"],
+    } satisfies ManualRaceSetup;
+    const reversedSetup: ManualRaceSetup = {
+      ...setup,
+      stack_order: [...setup.stack_order].reverse(),
+    };
+    const first = traceManualRace(defaultConfig, setup, 2);
+    const reversed = traceManualRace(defaultConfig, reversedSetup, 2);
+    const roundOneOrder = first.timeline.find(
+      (step) => step.event_type === "round_order" && step.round_no === 1,
+    );
+    const calcharoTurn = first.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.round_no === 1 && step.actor === "calcharo",
+    );
+    expect(roundOneOrder?.notes).toContain("首轮同在起点，暂无堆叠前后，轮初堆叠技能不触发");
+    expect(calcharoTurn?.notes).not.toContain("末位起步 +3");
+    expect(reversed.rounds).toBe(first.rounds);
+    expect(reversed.ranking).toEqual(first.ranking);
+  });
+
+  it("marks trigger-once skills as already used before the next finish in manual second-lap mode", () => {
+    const match = buildManualMatch(defaultConfig, {
+      lap_mode: "second",
+      racers: ["aemis", "younuo", "cartethyia"],
+      positions: {
+        aemis: 30,
+        younuo: 18,
+        cartethyia: 29,
+      },
+      stack_order: ["aemis", "younuo", "cartethyia"],
+    });
+    expect(match.initial_state?.state_flags?.aemis_midpoint_teleport_triggered).toBe(true);
+    expect(match.initial_state?.state_flags?.younuo_midpoint_teleport_triggered).toBe(true);
+    expect(match.initial_state?.state_flags?.cartethyia_triggered).toBe(true);
+
+    const finishMatch = buildManualMatch(defaultConfig, {
+      lap_mode: "second",
+      racers: ["aemis"],
+      positions: { aemis: 32 },
+      stack_order: ["aemis"],
+    });
+    expect(finishMatch.initial_state?.state_flags?.aemis_midpoint_teleport_triggered).toBeUndefined();
   });
 
   it("uses configured skill names in labels", () => {
@@ -272,7 +347,30 @@ describe("browser simulator", () => {
     expect(carllottaTurn?.to_position).toBe(4);
   });
 
-  it("teleports Aemis to the nearest racer ahead after ending at tile 15 or above", () => {
+  it("teleports Aemis to the nearest racer ahead after ending above tile 15", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [2];
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["aemis", "augusta"],
+        positions: { aemis: 14, augusta: 20 },
+        stack_order: ["aemis", "augusta"],
+      },
+      20260510,
+    );
+    const turn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "aemis",
+    );
+    const teleportPosition = Number(turn?.teleport_to_position);
+    expect(turn?.teleported).toBe(true);
+    expect(turn?.teleport_trigger_position).toBe(15);
+    expect(turn?.to_position).toBe(teleportPosition);
+    expect(turn?.stacks[String(teleportPosition)]?.at(-1)).toBe("aemis");
+  });
+
+  it("does not trigger Aemis teleport when ending exactly on tile 15", () => {
     const config = cloneConfig();
     config.assumptions.dice_sides = [1];
     const trace = traceManualRace(
@@ -288,11 +386,132 @@ describe("browser simulator", () => {
     const turn = trace.timeline.find(
       (step) => step.event_type === "racer_turn" && step.actor === "aemis",
     );
-    const teleportPosition = Number(turn?.teleport_to_position);
+    expect(turn?.to_position).toBe(15);
+    expect(turn?.teleported).toBeUndefined();
+    expect(turn?.midpoint_teleport_triggered).toBeUndefined();
+  });
+
+  it("ignores racers on Aemis's landing tile when choosing the teleport target", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [2];
+    setRacerSkill(config, "augusta", { type: "none" });
+    setRacerSkill(config, "hiyuki", { type: "none" });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["aemis", "augusta", "hiyuki"],
+        positions: { aemis: 15, augusta: 17, hiyuki: 20 },
+        stack_order: ["aemis", "augusta", "hiyuki"],
+      },
+      20260510,
+    );
+    const turn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "aemis",
+    );
+    expect(turn?.to_position).toBe(20);
+    expect(turn?.teleport_target).toBe("hiyuki");
+    expect(turn?.stacks["17"]).toContain("augusta");
+    expect(turn?.stacks["17"]).not.toContain("aemis");
+  });
+
+  it("uses Aemis's post-mechanism tile when choosing the teleport target", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [2];
+    setRacerSkill(config, "augusta", { type: "none" });
+    setRacerSkill(config, "hiyuki", { type: "none" });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["aemis", "augusta", "hiyuki"],
+        positions: { aemis: 14, augusta: 17, hiyuki: 20 },
+        stack_order: ["aemis", "augusta", "hiyuki"],
+      },
+      20260510,
+    );
+    const turn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "aemis",
+    );
+    expect(turn?.teleport_from_position).toBe(17);
+    expect(turn?.teleport_target).toBe("hiyuki");
+    expect(turn?.to_position).toBe(20);
+    expect(turn?.stacks["17"]).toContain("augusta");
+    expect(turn?.stacks["17"]).not.toContain("aemis");
+  });
+
+  it("teleports only Aemis and leaves carried racers on her pre-teleport tile", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [2];
+    setRacerSkill(config, "hiyuki", { type: "none" });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["aemis", "augusta", "hiyuki"],
+        positions: { aemis: 14, augusta: 14, hiyuki: 20 },
+        stack_order: ["augusta", "aemis", "hiyuki"],
+      },
+      20260512,
+    );
+    const turn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "aemis",
+    );
+    const teleportFrom = String(turn?.teleport_from_position);
+    const teleportTo = String(turn?.teleport_to_position);
+
+    expect(turn?.movers).toContain("augusta");
     expect(turn?.teleported).toBe(true);
-    expect(turn?.teleport_trigger_position).toBe(15);
-    expect(turn?.to_position).toBe(teleportPosition);
-    expect(turn?.stacks[String(teleportPosition)]?.at(-1)).toBe("aemis");
+    expect(turn?.stacks[teleportFrom]).toEqual(["augusta"]);
+    expect(turn?.stacks[teleportTo]?.at(-1)).toBe("aemis");
+  });
+
+  it("does not let Aemis reuse her first-lap teleport before crossing the next finish", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    setRacerSkill(config, "augusta", { type: "none" });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "second",
+        racers: ["aemis", "augusta"],
+        positions: { aemis: 30, augusta: 31 },
+        stack_order: ["aemis", "augusta"],
+      },
+      20260512,
+    );
+    const turn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "aemis",
+    );
+    expect(turn?.from_position).toBe(30);
+    expect(turn?.to_position).toBe(31);
+    expect(turn?.teleported).toBeUndefined();
+    expect(turn?.midpoint_teleport_triggered).toBeUndefined();
+  });
+
+  it("refreshes Aemis's teleport after she crosses the next finish in second-lap mode", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [17];
+    setRacerSkill(config, "augusta", {
+      type: "fixed_roll_cycle",
+      sequence: [18],
+    });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "second",
+        racers: ["aemis", "augusta"],
+        positions: { aemis: 31, augusta: 32 },
+        stack_order: ["aemis", "augusta"],
+      },
+      7,
+    );
+    const turn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "aemis",
+    );
+    expect(turn?.teleported).toBe(true);
+    expect(turn?.teleport_target).toBe("augusta");
+    expect(turn?.notes).toContain("超过15格，传送到奥古斯塔顶端");
   });
 
   it("does not consume Aemis teleport when no racer is ahead", () => {
@@ -341,5 +560,145 @@ describe("browser simulator", () => {
     expect(augustaTurn?.to_position).toBe(15);
     expect(augustaTurn?.teleported).toBeUndefined();
     expect(augustaTurn?.midpoint_teleport_triggered).toBeUndefined();
+  });
+
+  it("makes Augusta skip from the top of a stack and act last next round", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["florof", "augusta"],
+        positions: { florof: 4, augusta: 4 },
+        stack_order: ["augusta", "florof"],
+      },
+      20260512,
+    );
+
+    const roundOneAugusta = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.round_no === 1 && step.actor === "augusta",
+    );
+    const roundTwoOrder = trace.timeline.find(
+      (step) => step.event_type === "round_order" && step.round_no === 2,
+    );
+    expect(roundOneAugusta?.roll).toBeNull();
+    expect(roundOneAugusta?.steps).toBe(0);
+    expect(roundOneAugusta?.notes).toContain("轮初位于顶端，本回合不行动");
+    expect(roundTwoOrder?.action_order?.at(-1)).toBe("augusta");
+  });
+
+  it("teleports Younuo's adjacent ranked racers after she passes the midpoint", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    setRacerSkill(config, "augusta", { type: "none" });
+    setRacerSkill(config, "calcharo", { type: "none" });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["younuo", "augusta", "calcharo"],
+        positions: { younuo: 15, augusta: 18, calcharo: 14 },
+        stack_order: ["augusta", "younuo", "calcharo"],
+      },
+      20260512,
+    );
+
+    const younuoTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "younuo",
+    );
+    const stack = younuoTurn?.stacks[String(younuoTurn.to_position)];
+    expect(younuoTurn?.adjacent_rank_teleport_triggered).toBe(true);
+    expect(younuoTurn?.teleported_racers).toEqual(["augusta", "calcharo"]);
+    expect(stack).toEqual(["calcharo", "younuo", "augusta"]);
+  });
+
+  it("gives Florof the round-start bottom-stack movement bonus", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["florof", "augusta"],
+        positions: { florof: 4, augusta: 4 },
+        stack_order: ["augusta", "florof"],
+      },
+      20260512,
+    );
+    const florofTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.round_no === 1 && step.actor === "florof",
+    );
+    expect(florofTurn?.steps).toBe(4);
+    expect(florofTurn?.notes).toContain("轮初底层 +3");
+  });
+
+  it("can schedule Changli to act last on the next round when stacked above others", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    setRacerSkill(config, "augusta", { type: "none" });
+    setRacerSkill(config, "changli", {
+      type: "below_stack_chance_next_round_last",
+      probability: 1,
+    });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["changli", "augusta"],
+        positions: { changli: 5, augusta: 5 },
+        stack_order: ["changli", "augusta"],
+      },
+      20260512,
+    );
+    const roundTwoOrder = trace.timeline.find(
+      (step) => step.event_type === "round_order" && step.round_no === 2,
+    );
+    expect(roundTwoOrder?.action_order?.at(-1)).toBe("changli");
+  });
+
+  it("lets Jinhsi move to the top before moving when the probability triggers", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    setRacerSkill(config, "jinhsi", {
+      type: "above_stack_chance_to_top",
+      probability: 1,
+    });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["jinhsi", "augusta"],
+        positions: { jinhsi: 7, augusta: 7 },
+        stack_order: ["augusta", "jinhsi"],
+      },
+      20260512,
+    );
+    const jinhsiTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "jinhsi",
+    );
+    expect(jinhsiTurn?.movers).toEqual(["jinhsi"]);
+    expect(jinhsiTurn?.notes).toContain("移至堆叠顶端");
+  });
+
+  it("gives Calcharo a movement bonus when starting the move in last place", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    setRacerSkill(config, "augusta", { type: "none" });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["calcharo", "augusta"],
+        positions: { calcharo: 4, augusta: 8 },
+        stack_order: ["augusta", "calcharo"],
+      },
+      20260512,
+    );
+    const calcharoTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "calcharo",
+    );
+    expect(calcharoTurn?.steps).toBe(4);
+    expect(calcharoTurn?.notes).toContain("末位起步 +3");
   });
 });

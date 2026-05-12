@@ -24,6 +24,8 @@ const racerIcons: Record<string, string> = {
   siglica: new URL("../../assets/tuanzi-icons/xigelika.png", import.meta.url).href,
 };
 
+const budawangIcon = new URL("../../assets/tuanzi-icons/__budawang__.png", import.meta.url).href;
+
 export function buildTrackLayout(config: TuanziConfig): TrackLayout {
   const sequence = [...config.track.sequence];
   const mechanisms = config.track.mechanisms;
@@ -141,6 +143,7 @@ export function buildVisualUnits(config: TuanziConfig, racerIds: string[]): Visu
     name: config.special_units?.budawang?.name ?? "布大王",
     short: "布王",
     color: "#1f2933",
+    icon: budawangIcon,
     skill: "逆向巡场",
     special: true,
   });

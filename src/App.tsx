@@ -29,7 +29,7 @@ import {
   SIMULATION_RUN_STEP,
   clampSimulationRuns,
 } from "./lib/runLimits";
-import { racerById } from "./lib/sim";
+import { getFirstLapStartPosition, racerById } from "./lib/sim";
 import {
   type ManualLapMode,
   type ManualRaceSetup,
@@ -46,6 +46,7 @@ const initialParams = new URLSearchParams(window.location.search);
 const allRacers = defaultConfig.racers;
 const allRacerIds = new Set(allRacers.map((racer) => racer.id));
 const trackLength = Number(defaultConfig.assumptions.track_length);
+const firstLapStartPosition = getFirstLapStartPosition(defaultConfig);
 const GITHUB_REPOSITORY_URL = "https://github.com/Uqbc9/wuthering-waves-tuanzi-sim";
 
 function clampPosition(value: unknown): number {
@@ -174,7 +175,7 @@ export default function App() {
       positions: Object.fromEntries(
         orderedSelectedRacers.map((racerId) => [
           racerId,
-          firstLapLocked ? 0 : clampPosition(positions[racerId]),
+          firstLapLocked ? firstLapStartPosition : clampPosition(positions[racerId]),
         ]),
       ),
       stack_order: orderedSelectedRacers,
@@ -207,7 +208,9 @@ export default function App() {
     url.searchParams.set(
       "positions",
       orderedSelectedRacers
-        .map((racerId) => `${racerId}:${firstLapLocked ? 0 : clampPosition(positions[racerId])}`)
+        .map((racerId) =>
+          `${racerId}:${firstLapLocked ? firstLapStartPosition : clampPosition(positions[racerId])}`,
+        )
         .join(","),
     );
     url.searchParams.set("order", orderedSelectedRacers.join(","));
@@ -458,7 +461,7 @@ export default function App() {
                     min={0}
                     max={trackLength}
                     step={1}
-                    value={firstLapLocked ? 0 : (positions[racerId] ?? 0)}
+                    value={firstLapLocked ? firstLapStartPosition : (positions[racerId] ?? 0)}
                     disabled={firstLapLocked}
                     onChange={(event) => updateRacerPosition(racerId, event.target.value)}
                   />

@@ -42,7 +42,7 @@ const zhText = {
   playback: "赛局回放",
   playbackProgress: "回放进度",
   positionAria: "站位",
-  positionGuideFirstText: "第一圈固定全员 0，起点不判定堆叠前后；每轮行动顺序随机。",
+  positionGuideFirstText: "第一圈固定全员 1，开局起点不判定堆叠前后；每轮行动顺序随机。",
   positionGuideText: "上方优先；起点/终点不判定前后。",
   positionGuideTitle: "站位与同格顺序",
   positionsList: "站位和同格顺序",
@@ -108,7 +108,7 @@ const enText: TextMap = {
   playback: "Race replay",
   playbackProgress: "Replay progress",
   positionAria: "position",
-  positionGuideFirstText: "First lap locks everyone at 0; start-tile stack order is neutral and action order is random.",
+  positionGuideFirstText: "First lap locks everyone at 1; opening start order is neutral and action order is random.",
   positionGuideText: "Higher rows lead; start/finish tiles ignore same-tile order.",
   positionGuideTitle: "Positions and same-tile order",
   positionsList: "positions and same-tile order",
@@ -199,7 +199,7 @@ const mechanismLabels: Record<string, Record<Language, string>> = {
 const skillLabels: Record<string, Record<Language, string>> = {
   above_stack_chance_to_top: {
     zh: "概率登顶",
-    en: "If another tuanzi is stacked above, has a 40% chance to move to the top of the stack before moving.",
+    en: "Before Jinhsi starts moving, if another tuanzi is stacked above, has a 40% chance to move to the top of the stack.",
   },
   after_meeting_budawang_bonus: {
     zh: "遇王加速",
@@ -227,7 +227,7 @@ const skillLabels: Record<string, Record<Language, string>> = {
   },
   last_place_start_bonus: {
     zh: "末位起步",
-    en: "At the start of its move, if it is in last place, moves +3 extra.",
+    en: "At the start of its move, if it is in last place, moves +3 extra; after Budawang joins, Budawang counts for last place.",
   },
   mark_higher_neighbors_after_roll: {
     zh: "标记减速",
@@ -245,6 +245,10 @@ const skillLabels: Record<string, Record<Language, string>> = {
     zh: "中点牵引",
     en: "Once per race after passing the midpoint, teleports the adjacent ranked racers to its tile in their prior rank order.",
   },
+  midpoint_all_racers_to_self_teleport_once: {
+    zh: "全员牵引",
+    en: "Once per race after ending its own move beyond the trigger tile, if another racer is ahead, teleports every other racer to its tile in prior rank order.",
+  },
   none: { zh: "无技能", en: "No skill" },
   per_move_chance_bonus: {
     zh: "概率加速",
@@ -257,7 +261,7 @@ const skillLabels: Record<string, Record<Language, string>> = {
   },
   round_start_bottom_bonus: {
     zh: "底层加速",
-    en: "At round start, if it is at the bottom of a stack, moves +3 extra on its move this round.",
+    en: "Before moving, if it is at the bottom of a stack, moves +3 extra; does not trigger if Budawang is below.",
   },
   same_roll_bonus: {
     zh: "同点加速",
@@ -269,7 +273,7 @@ const skillLabels: Record<string, Record<Language, string>> = {
   },
   top_skip_next_round_last: {
     zh: "顶端停步",
-    en: "At round start, if it is on top of a stack, skips this round and acts last next round.",
+    en: "Before moving, if it is on top of a stack, skips this turn and acts last next round.",
   },
 };
 
@@ -429,7 +433,8 @@ export function translateTimelineNote(note: string, language: Language): string 
     "本步无特殊结算": "No special resolution on this step",
     "第3轮起布大王加入行动顺序": "Budawang joins the action order from round 3",
     "每轮随机行动；西格莉卡轮初标记": "Random action order each round; Siglica marks at round start",
-    "轮初位于顶端，本回合不行动": "Started the round on top of a stack and skips this turn",
+    "开始走格子前位于顶端，本回合不行动，下回合最后行动":
+      "Was on top before moving, skipped this turn, and will act last next round",
     "移至堆叠顶端": "Moved to the top of the stack",
     "首轮同在起点，暂无前后顺序，西格莉卡不标记":
       "All racers start together, so Siglica does not mark anyone in round 1",
@@ -468,6 +473,10 @@ export function translateTimelineNote(note: string, language: Language): string 
   match = note.match(/^轮初底层 \+(\d+)$/);
   if (match) {
     return `Started the round at the bottom +${match[1]}`;
+  }
+  match = note.match(/^开始走格子前底层 \+(\d+)$/);
+  if (match) {
+    return `Started the move at the bottom +${match[1]}`;
   }
   match = note.match(/^末位起步 \+(\d+)$/);
   if (match) {

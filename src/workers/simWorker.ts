@@ -1,4 +1,5 @@
 import { defaultConfig } from "../config";
+import { clampSimulationRuns } from "../lib/runLimits";
 import { simulateManualRace, traceManualRacePool } from "../lib/sim";
 import { buildRacePlaybackData } from "../lib/visual";
 import type { ManualRaceSetup, RacePlaybackData, SimulationResult } from "../types";
@@ -28,7 +29,7 @@ const post = (message: WorkerResponse) => {
 self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   const { id, manualSetup, runs, seed, traceSamples } = event.data;
   try {
-    const safeRuns = Math.max(1, Math.floor(runs));
+    const safeRuns = clampSimulationRuns(runs);
     const result = simulateManualRace(defaultConfig, manualSetup, safeRuns, seed, (completedRuns, totalRuns) => {
       post({ id, type: "progress", completedRuns, totalRuns });
     });

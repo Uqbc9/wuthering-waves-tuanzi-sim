@@ -2,29 +2,7 @@
   "metadata": {
     "title": "鸣潮「小团快跑・锦标赛」2026 模拟配置",
     "updated_at": "2026-05-09",
-    "data_status": "2026 公开网页仅确认活动框架；A组名单、技能、赛道来自用户补充；未公开细则沿用 2025 小团快跑公开赛制并作可调模拟假设。",
-    "sources": [
-      {
-        "label": "游民星空 2025 小团快跑官方玩法镜像",
-        "url": "https://www.gamersky.com/handbook/202505/1926056.shtml",
-        "note": "确认 2025 活动时间、分组淘汰、每日比赛、应援和结算框架。"
-      },
-      {
-        "label": "GameKee 2025 小团快跑活动页",
-        "url": "https://www.gamekee.com/mc/661145.html",
-        "note": "确认 2025 周年庆典应援活动说明。"
-      },
-      {
-        "label": "17173 2026 3.3 活动汇总",
-        "url": "https://news.17173.com/content/04252026/003046809.shtml",
-        "note": "确认 2026 小团快跑回归、参赛选手扩大到 18 位。"
-      },
-      {
-        "label": "OurPlay 2026 3.3 版本新闻",
-        "url": "https://www.ourplay.net/news/detail/10349",
-        "note": "确认 3.3 版本上线与绯雪、达妮娅等新内容。"
-      }
-    ]
+    "data_status": "2026 公开网页仅确认活动框架；A组名单、技能、赛道来自用户补充；未公开细则沿用 2025 小团快跑公开赛制并作可调模拟假设。"
   },
   "assumptions": {
     "dice_sides": [1, 2, 3],

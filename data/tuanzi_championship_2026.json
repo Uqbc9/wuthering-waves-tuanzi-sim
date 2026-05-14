@@ -243,7 +243,7 @@
       "name": "尤诺",
       "group": "C",
       "skill": {
-        "description": "每场比赛一次，轮到自己行动并走完格子后，若位于15格以上且前方存在其他非布大王的团子，则将所有其他团子传送至自己的格子。传送后的堆叠顺序与传送前排名顺序一致。",
+        "description": "每场比赛一次，轮到自己行动并走完格子后，若位于15格以上且前方或者头顶存在其他非布大王的团子，则将所有其他团子传送至自己的格子。传送后的堆叠顺序与传送前排名顺序一致。",
         "type": "midpoint_all_racers_to_self_teleport_once",
         "trigger_once": true,
         "trigger_position": 15
@@ -274,7 +274,7 @@
       "name": "今汐",
       "group": "C",
       "skill": {
-        "description": "开始走格子前，如果今汐的头顶堆叠其他团子，有40%的概率移动到所有团子的最上方。",
+        "description": "当今汐头顶没有团子时，若其他团子堆叠到今汐头顶，则有40%的概率移动到所有团子的最上方。",
         "type": "above_stack_chance_to_top",
         "probability": 0.4
       }

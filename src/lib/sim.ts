@@ -224,6 +224,7 @@ export class Race {
   private budawangPosition: number;
   private budawangPendingRoundEndTeleport = false;
   private initialStateLabel = "";
+  private stackSkillNotes: string[] = [];
 
   constructor(
     config: TuanziConfig,
@@ -722,6 +723,7 @@ export class Race {
   }
 
   private takeRacerTurn(racerId: string): Record<string, unknown> {
+    this.stackSkillNotes = [];
     const skill = this.racers[racerId].skill;
     const skillType = String(skill.type ?? "none");
     const notes: string[] = [];
@@ -729,9 +731,14 @@ export class Race {
 
     if (skillType === "top_skip_next_round_last" && this.isStackTop(racerId)) {
       const move = this.stationaryRacerMove(racerId);
+      this.applyJinhsiStackedAboveTrigger(
+        this.positions[racerId],
+        this.stackForRacer(racerId).filter((unitId) => unitId !== racerId),
+      );
       this.nextRoundLastActionRacers.add(racerId);
       delete this.currentRoundRolls[racerId];
       notes.push("开始走格子前位于顶端，本回合不行动，下回合最后行动");
+      notes.push(...this.consumeStackSkillNotes());
       return {
         actor: racerId,
         roll: null,
@@ -813,20 +820,11 @@ export class Race {
       }
     }
 
-    if (
-      !skipMovement &&
-      skillType === "above_stack_chance_to_top" &&
-      this.hasStackedAbove(racerId) &&
-      this.rng.random() < asNumber(skill.probability)
-    ) {
-      this.moveRacerToTopOfStack(racerId);
-      notes.push("移至堆叠顶端");
-    }
-
     this.previousRoll[racerId] = roll;
     const move = skipMovement
       ? this.stationaryRacerMove(racerId)
       : this.moveRacerStack(racerId, steps, racerId);
+    notes.push(...this.consumeStackSkillNotes());
     if (!skipMovement && skillType === "midpoint_nearest_ahead_teleport_once") {
       const finalMovePosition = move.to_position;
       const teleport = this.applyThresholdTeleportIfNeeded(
@@ -841,6 +839,7 @@ export class Race {
         move.to_position = Number(teleport.to_position ?? move.to_position);
         Object.assign(extraMeta, teleport);
         delete extraMeta.note;
+        notes.push(...this.consumeStackSkillNotes());
       }
     }
     if (!skipMovement && skillType === "midpoint_all_racers_to_self_teleport_once") {
@@ -851,6 +850,7 @@ export class Race {
         }
         Object.assign(extraMeta, teleport);
         delete extraMeta.note;
+        notes.push(...this.consumeStackSkillNotes());
       }
     }
     this.updateHiyukiMeeting();
@@ -1036,6 +1036,54 @@ export class Race {
     this.stacks[position] = [...stack.filter((unitId) => unitId !== racerId), racerId];
   }
 
+  private consumeStackSkillNotes(): string[] {
+    const notes = this.stackSkillNotes;
+    this.stackSkillNotes = [];
+    return notes;
+  }
+
+  private racersAboveInStack(stack: string[], racerId: string): string[] {
+    const index = stack.indexOf(racerId);
+    if (index < 0) {
+      return [];
+    }
+    return stack
+      .slice(index + 1)
+      .filter((unitId) => this.racerIds.includes(unitId) && !this.finishedSet.has(unitId));
+  }
+
+  private applyJinhsiStackedAboveTrigger(position: number, previousStack: string[]): void {
+    const jinhsiId = "jinhsi";
+    if (
+      !this.racerIds.includes(jinhsiId) ||
+      this.finishedSet.has(jinhsiId) ||
+      this.positions[jinhsiId] !== position ||
+      this.isNeutralStartTile(position, jinhsiId)
+    ) {
+      return;
+    }
+
+    const skill = this.racers[jinhsiId]?.skill ?? {};
+    if (skillTypeOf(skill) !== "above_stack_chance_to_top") {
+      return;
+    }
+    if (
+      !previousStack.includes(jinhsiId) ||
+      this.racersAboveInStack(previousStack, jinhsiId).length > 0
+    ) {
+      return;
+    }
+    if (this.racersAboveInStack(this.stackForRacer(jinhsiId), jinhsiId).length === 0) {
+      return;
+    }
+    if (this.rng.random() >= asNumber(skill.probability)) {
+      return;
+    }
+
+    this.moveRacerToTopOfStack(jinhsiId);
+    this.stackSkillNotes.push(`${this.racers[jinhsiId].name}移至堆叠顶端`);
+  }
+
   private isLastPlace(racerId: string): boolean {
     if (
       this.isNeutralStartTile(this.positions[racerId], racerId) &&
@@ -1063,6 +1111,7 @@ export class Race {
   }
 
   private takeBudawangTurn(roundNo: number): Record<string, unknown> {
+    this.stackSkillNotes = [];
     let turnStartPosition = this.budawangPosition;
     const notes: string[] = [];
     if (!this.budawangActive) {
@@ -1115,6 +1164,7 @@ export class Race {
       notes.push(`走完后已到${lastName}后方，结算回起终点`);
     }
     teleportStatus = settlementStatus;
+    notes.push(...this.consumeStackSkillNotes());
     return {
       actor: BUDDAWANG_ID,
       roll: steps,
@@ -1176,6 +1226,7 @@ export class Race {
     const targetProgress = this.lapFinishMode ? this.lapProgressScore(targetRacer) : null;
     const activeMovers = [racerId];
     this.detachFromStack(activeMovers);
+    const previousStack = [...(this.stacks[targetPosition] ?? [])];
     for (const mover of activeMovers) {
       if (targetProgress !== null) {
         this.distanceTraveled[mover] = Math.max(0, targetProgress + this.finishDistance[mover]);
@@ -1185,6 +1236,7 @@ export class Race {
     this.stacks[targetPosition] = this.stacks[targetPosition] ?? [];
     this.stacks[targetPosition].push(...activeMovers);
     this.normalizeBudawangStack(targetPosition);
+    this.applyJinhsiStackedAboveTrigger(targetPosition, previousStack);
 
     return {
       midpoint_teleport_triggered: true,
@@ -1213,7 +1265,7 @@ export class Race {
     if (this.midpointTriggerProgress(racerId, finalMovePosition) <= triggerPosition) {
       return null;
     }
-    if (!this.nearestRacerAhead(racerId, [])) {
+    if (!this.hasOtherRacerAheadOrAbove(racerId)) {
       return null;
     }
 
@@ -1230,6 +1282,7 @@ export class Race {
     this.midpointTeleportTriggered[racerId] = true;
     const teleportPosition = this.positions[racerId];
     const teleportProgress = this.lapFinishMode ? this.lapProgressScore(racerId) : null;
+    const previousStack = [...(this.stacks[teleportPosition] ?? [])];
     const rankIndex = new Map(rankingBefore.map((id, index) => [id, index]));
     const rankingOrder = [...targetIds].sort(
       (left, right) => (rankIndex.get(left) ?? 0) - (rankIndex.get(right) ?? 0),
@@ -1263,6 +1316,7 @@ export class Race {
       ...stack.slice(ownStackIndex + 1),
     ];
     this.normalizeBudawangStack(teleportPosition);
+    this.applyJinhsiStackedAboveTrigger(teleportPosition, previousStack);
 
     return {
       midpoint_teleport_triggered: true,
@@ -1286,6 +1340,21 @@ export class Race {
         delete this.stacks[position];
       }
     }
+  }
+
+  private hasOtherRacerAheadOrAbove(racerId: string): boolean {
+    return this.nearestRacerAhead(racerId, []) !== null || this.hasOtherRacerStackedAbove(racerId);
+  }
+
+  private hasOtherRacerStackedAbove(racerId: string): boolean {
+    const stack = this.stackForRacer(racerId);
+    const index = stack.indexOf(racerId);
+    if (index < 0) {
+      return false;
+    }
+    return stack
+      .slice(index + 1)
+      .some((unitId) => this.racerIds.includes(unitId) && !this.finishedSet.has(unitId));
   }
 
   private nearestRacerAhead(racerId: string, excludedRacers: string[]): string | null {
@@ -1371,7 +1440,8 @@ export class Race {
     if (
       !asBoolean(this.assumptions.carry_racers_stacked_above) ||
       this.isOpeningStartRacer(racerId, position) ||
-      (asBoolean(this.assumptions.carry_disabled_on_start_and_finish) &&
+      (!this.lapFinishMode &&
+        asBoolean(this.assumptions.carry_disabled_on_start_and_finish) &&
         (position === 0 || position === this.length)) ||
       !stack.includes(racerId)
     ) {
@@ -1442,12 +1512,14 @@ export class Race {
       this.reorderLapFinishedMovers(movers, finishedMovers);
       if (unfinishedMovers.length > 0) {
         const position = this.positions[unfinishedMovers[0]];
+        const previousStack = [...(this.stacks[position] ?? [])];
         for (const racerId of unfinishedMovers) {
           this.positions[racerId] = position;
         }
         this.stacks[position] = this.stacks[position] ?? [];
         this.stacks[position].push(...unfinishedMovers);
         this.normalizeBudawangStack(position);
+        this.applyJinhsiStackedAboveTrigger(position, previousStack);
       }
       if (
         triggerMechanism &&
@@ -1471,12 +1543,14 @@ export class Race {
     }
 
     const position = Math.max(0, newPosition);
+    const previousStack = [...(this.stacks[position] ?? [])];
     for (const racerId of movers) {
       this.positions[racerId] = position;
     }
     this.stacks[position] = this.stacks[position] ?? [];
     this.stacks[position].push(...movers);
     this.normalizeBudawangStack(position);
+    this.applyJinhsiStackedAboveTrigger(position, previousStack);
     if (triggerMechanism) {
       this.applyLandingMechanism(movers, activeRacerId, 1);
     }
@@ -1683,12 +1757,14 @@ export class Race {
 
     if (this.budawangPosition >= this.length) {
       if (this.lapFinishMode) {
+        const previousStack = [...(this.stacks[this.length] ?? [])];
         const stack = (this.stacks[this.length] = this.stacks[this.length] ?? []);
         if (!stack.includes(BUDDAWANG_ID)) {
           stack.push(BUDDAWANG_ID);
         }
         stack.push(...racerMovers);
         this.normalizeBudawangStack(this.length);
+        this.applyJinhsiStackedAboveTrigger(this.length, previousStack);
         return;
       }
       for (const racerId of [...racerMovers].reverse()) {
@@ -1702,12 +1778,14 @@ export class Race {
     for (const racerId of racerMovers) {
       this.positions[racerId] = this.budawangPosition;
     }
+    const previousStack = [...(this.stacks[this.budawangPosition] ?? [])];
     const stack = (this.stacks[this.budawangPosition] = this.stacks[this.budawangPosition] ?? []);
     if (!stack.includes(BUDDAWANG_ID)) {
       stack.push(BUDDAWANG_ID);
     }
     stack.push(...racerMovers);
     this.normalizeBudawangStack(this.budawangPosition);
+    this.applyJinhsiStackedAboveTrigger(this.budawangPosition, previousStack);
   }
 
   private uniqueMovers(movers: string[]): string[] {

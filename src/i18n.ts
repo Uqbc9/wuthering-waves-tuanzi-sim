@@ -199,7 +199,7 @@ const mechanismLabels: Record<string, Record<Language, string>> = {
 const skillLabels: Record<string, Record<Language, string>> = {
   above_stack_chance_to_top: {
     zh: "概率登顶",
-    en: "Before Jinhsi starts moving, if another tuanzi is stacked above, has a 40% chance to move to the top of the stack.",
+    en: "When no racer is stacked above Jinhsi, if another tuanzi becomes stacked above her, she has a 40% chance to move to the top of the stack.",
   },
   after_meeting_budawang_bonus: {
     zh: "遇王加速",
@@ -247,7 +247,7 @@ const skillLabels: Record<string, Record<Language, string>> = {
   },
   midpoint_all_racers_to_self_teleport_once: {
     zh: "全员牵引",
-    en: "Once per race after ending its own move beyond the trigger tile, if another racer is ahead, teleports every other racer to its tile in prior rank order.",
+    en: "Once per race after ending its own move beyond the trigger tile, if another racer is ahead or stacked above it, teleports every other racer to its tile in prior rank order.",
   },
   none: { zh: "无技能", en: "No skill" },
   per_move_chance_bonus: {
@@ -436,6 +436,7 @@ export function translateTimelineNote(note: string, language: Language): string 
     "开始走格子前位于顶端，本回合不行动，下回合最后行动":
       "Was on top before moving, skipped this turn, and will act last next round",
     "移至堆叠顶端": "Moved to the top of the stack",
+    "今汐移至堆叠顶端": "Jinhsi moved to the top of the stack",
     "首轮同在起点，暂无前后顺序，西格莉卡不标记":
       "All racers start together, so Siglica does not mark anyone in round 1",
     "所有团子需先到下一次起终点，再完整跑一圈到起终点":

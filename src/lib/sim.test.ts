@@ -698,6 +698,31 @@ describe("browser simulator", () => {
     expect(augustaTurn?.teleported_racers).toBeUndefined();
   });
 
+  it("triggers Younuo's all-racer teleport when another racer is stacked above her", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    setRacerSkill(config, "augusta", { type: "none" });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["younuo", "augusta"],
+        positions: { younuo: 15, augusta: 15 },
+        stack_order: ["augusta", "younuo"],
+      },
+      1,
+    );
+
+    const younuoTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "younuo",
+    );
+    const stack = younuoTurn?.stacks[String(younuoTurn.to_position)];
+    expect(younuoTurn?.movers).toEqual(["younuo", "augusta"]);
+    expect(younuoTurn?.all_racers_teleport_triggered).toBe(true);
+    expect(younuoTurn?.teleported_racers).toEqual(["augusta"]);
+    expect(stack).toEqual(["younuo", "augusta"]);
+  });
+
   it("does not trigger Younuo's all-racer teleport when no racer is ahead", () => {
     const config = cloneConfig();
     config.assumptions.dice_sides = [1];
@@ -905,6 +930,28 @@ describe("browser simulator", () => {
     expect(florofTurn?.notes).not.toContain("开始走格子前底层 +3");
   });
 
+  it("lets Florof carry racers above her from the shared finish tile in second-lap mode", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "second",
+        racers: ["florof", "jinhsi"],
+        positions: { florof: 32, jinhsi: 32 },
+        stack_order: ["jinhsi", "florof"],
+      },
+      1,
+    );
+    const florofTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.round_no === 1 && step.actor === "florof",
+    );
+
+    expect(florofTurn?.notes).toContain("开始走格子前底层 +3");
+    expect(florofTurn?.movers).toEqual(["florof", "jinhsi"]);
+    expect(florofTurn?.stacks[String(florofTurn.to_position)]).toEqual(["florof", "jinhsi"]);
+  });
+
   it("can schedule Changli to act last on the next round when stacked above others", () => {
     const config = cloneConfig();
     config.assumptions.dice_sides = [1];
@@ -929,7 +976,7 @@ describe("browser simulator", () => {
     expect(roundTwoOrder?.action_order?.at(-1)).toBe("changli");
   });
 
-  it("lets Jinhsi move to the top before moving when the probability triggers", () => {
+  it("does not move Jinhsi to the top just because her own turn starts with a racer above", () => {
     const config = cloneConfig();
     config.assumptions.dice_sides = [1];
     setRacerSkill(config, "jinhsi", {
@@ -944,13 +991,99 @@ describe("browser simulator", () => {
         positions: { jinhsi: 7, augusta: 7 },
         stack_order: ["augusta", "jinhsi"],
       },
-      20260512,
+      1,
+    );
+    const roundOrder = trace.timeline.find(
+      (step) => step.event_type === "round_order" && step.round_no === 1,
     );
     const jinhsiTurn = trace.timeline.find(
       (step) => step.event_type === "racer_turn" && step.actor === "jinhsi",
     );
-    expect(jinhsiTurn?.movers).toEqual(["jinhsi"]);
-    expect(jinhsiTurn?.notes).toContain("移至堆叠顶端");
+    expect(roundOrder?.action_order?.[0]).toBe("jinhsi");
+    expect(jinhsiTurn?.movers).toEqual(["jinhsi", "augusta"]);
+    expect(jinhsiTurn?.notes).not.toContain("今汐移至堆叠顶端");
+  });
+
+  it("lets Jinhsi move to the top when another racer lands above her", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    setRacerSkill(config, "augusta", { type: "none" });
+    setRacerSkill(config, "jinhsi", {
+      type: "above_stack_chance_to_top",
+      probability: 1,
+    });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["augusta", "jinhsi"],
+        positions: { augusta: 7, jinhsi: 8 },
+        stack_order: ["augusta", "jinhsi"],
+      },
+      1,
+    );
+    const augustaTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "augusta",
+    );
+    expect(augustaTurn?.movers).toEqual(["augusta"]);
+    expect(augustaTurn?.notes).toContain("今汐移至堆叠顶端");
+    expect(augustaTurn?.stacks[String(augustaTurn?.to_position)]).toEqual(["augusta", "jinhsi"]);
+  });
+
+  it("lets Jinhsi move above Augusta when Augusta skips and restacks on her", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    setRacerSkill(config, "jinhsi", {
+      type: "above_stack_chance_to_top",
+      probability: 1,
+    });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["augusta", "jinhsi"],
+        positions: { augusta: 7, jinhsi: 7 },
+        stack_order: ["augusta", "jinhsi"],
+      },
+      1,
+    );
+    const augustaTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "augusta",
+    );
+    expect(augustaTurn?.skipped_by_skill).toBe(true);
+    expect(augustaTurn?.notes).toContain("今汐移至堆叠顶端");
+    expect(augustaTurn?.stacks[String(augustaTurn?.to_position)]).toEqual(["augusta", "jinhsi"]);
+  });
+
+  it("does not trigger Augusta or Jinhsi when another racer is above Augusta", () => {
+    const config = cloneConfig();
+    config.assumptions.dice_sides = [1];
+    setRacerSkill(config, "hiyuki", { type: "none" });
+    setRacerSkill(config, "jinhsi", {
+      type: "above_stack_chance_to_top",
+      probability: 1,
+    });
+    const trace = traceManualRace(
+      config,
+      {
+        lap_mode: "first",
+        racers: ["augusta", "jinhsi", "hiyuki"],
+        positions: { augusta: 7, jinhsi: 7, hiyuki: 7 },
+        stack_order: ["hiyuki", "augusta", "jinhsi"],
+      },
+      5,
+    );
+    const augustaTurn = trace.timeline.find(
+      (step) => step.event_type === "racer_turn" && step.actor === "augusta",
+    );
+    expect(augustaTurn?.movers).toEqual(["augusta", "hiyuki"]);
+    expect(augustaTurn?.skipped_by_skill).toBeUndefined();
+    expect(augustaTurn?.notes).not.toContain(
+      "开始走格子前位于顶端，本回合不行动，下回合最后行动",
+    );
+    expect(augustaTurn?.notes).not.toContain("今汐移至堆叠顶端");
+    expect(augustaTurn?.stacks[String(augustaTurn?.from_position)]).toEqual(["jinhsi"]);
+    expect(augustaTurn?.stacks[String(augustaTurn?.to_position)]).toEqual(["augusta", "hiyuki"]);
   });
 
   it("does not check Jinhsi before another racer moves a stack", () => {

@@ -108,7 +108,18 @@ export type RaceResult = {
   action_order: string[];
   round_orders: string[][];
   first_rolls: Record<string, number>;
+  first_finish?: FirstFinishSnapshot | null;
   timeline?: TimelineStep[];
+};
+
+export type FirstFinishSnapshot = {
+  round_no: number;
+  first_racer: string;
+  first_racer_position: number;
+  last_racer: string;
+  last_racer_position: number;
+  ranking: string[];
+  positions: Record<string, number>;
 };
 
 export type TimelineStep = {
@@ -143,6 +154,18 @@ export type SingleSimulationResult = {
   runs: number;
   rank_counts: Record<string, Record<string, number>>;
   avg_rounds: number;
+  first_finish_evaluation: FirstFinishEvaluation;
+};
+
+export type FirstFinishEvaluation = {
+  total_runs: number;
+  tail_position_buckets: Record<
+    string,
+    {
+      runs: number;
+      rank_counts: Record<string, Record<string, number>>;
+    }
+  >;
 };
 
 export type AggregateSimulationResult = {
@@ -170,6 +193,7 @@ export type SingleRaceTrace = {
   action_order: string[];
   round_orders: string[][];
   first_rolls: Record<string, number>;
+  first_finish?: FirstFinishSnapshot | null;
   timeline: TimelineStep[];
 };
 
@@ -231,6 +255,7 @@ export type RacePlayback = {
   round_orders: string[][];
   round_summaries: RoundSummary[];
   first_rolls: Record<string, number>;
+  first_finish?: FirstFinishSnapshot | null;
   timeline: TimelineStep[];
 };
 

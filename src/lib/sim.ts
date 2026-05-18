@@ -2,6 +2,8 @@ import {
   BUDDAWANG_ID,
   type AggregateMatch,
   type AggregateSimulationResult,
+  type FirstFinishEvaluation,
+  type FirstFinishSnapshot,
   type InitialStateConfig,
   type ManualRaceSetup,
   type MatchConfig,
@@ -15,6 +17,7 @@ import {
   type TimelineStep,
   type TuanziConfig,
 } from "../types";
+import { matchesFirstFinishTailFilter } from "./filterEvaluation";
 import { SeededRng } from "./rng";
 
 const ROUND_START_MARK_SKILLS = new Set([
@@ -66,6 +69,10 @@ function incrementCounter(
 
 function progressEvery(runs: number): number {
   return Math.max(1, Math.floor(runs / 24));
+}
+
+function emptyRankCounts(racerIds: string[]): Record<string, Record<string, number>> {
+  return Object.fromEntries(racerIds.map((racerId) => [racerId, {}]));
 }
 
 export function getFirstLapStartPosition(config: TuanziConfig): number {
@@ -225,6 +232,7 @@ export class Race {
   private budawangPendingRoundEndTeleport = false;
   private initialStateLabel = "";
   private stackSkillNotes: string[] = [];
+  private firstFinishSnapshot: FirstFinishSnapshot | null = null;
 
   constructor(
     config: TuanziConfig,
@@ -291,6 +299,7 @@ export class Race {
       );
     }
     this.recordState("开赛", "start", { notes: startNotes });
+    this.captureFirstFinishSnapshotIfNeeded(0);
 
     for (let roundNo = 1; roundNo <= this.maxRounds; roundNo += 1) {
       this.siglicaPenalties = {};
@@ -328,6 +337,7 @@ export class Race {
         if (actorId === BUDDAWANG_ID) {
           const turn = this.takeBudawangTurn(roundNo);
           this.updateHiyukiMeeting();
+          this.captureFirstFinishSnapshotIfNeeded(roundNo);
           this.recordState(`第${roundNo}轮 布大王移动`, "budawang_turn", {
             round_no: roundNo,
             ...turn,
@@ -339,6 +349,7 @@ export class Race {
           continue;
         }
         const turn = this.takeRacerTurn(actorId);
+        this.captureFirstFinishSnapshotIfNeeded(roundNo);
         this.recordState(`第${roundNo}轮 ${this.racers[actorId].name}`, "racer_turn", {
           round_no: roundNo,
           ...turn,
@@ -353,6 +364,7 @@ export class Race {
         asBoolean(this.assumptions.budawang_teleports_to_finish_at_round_end_when_apart)
       ) {
         const roundEnd = this.resolveBudawangEndOfRound();
+        this.captureFirstFinishSnapshotIfNeeded(roundNo);
         this.recordState(`第${roundNo}轮 布大王回合末位置`, "budawang_round_end", {
           round_no: roundNo,
           ...roundEnd,
@@ -2024,6 +2036,30 @@ export class Race {
     return this.lapFinishMode ? this.lapProgressScore(unitId) : this.positions[unitId];
   }
 
+  private captureFirstFinishSnapshotIfNeeded(roundNo: number): void {
+    if (this.firstFinishSnapshot || this.finished.length === 0) {
+      return;
+    }
+    const ranking = this.currentRanking();
+    const firstRacer = this.finished[0] ?? ranking[0];
+    const lastRacer = ranking.at(-1);
+    if (!firstRacer || !lastRacer) {
+      return;
+    }
+    const positions = Object.fromEntries(
+      this.racerIds.map((racerId) => [racerId, Math.trunc(this.positions[racerId] ?? this.length)]),
+    );
+    this.firstFinishSnapshot = {
+      round_no: roundNo,
+      first_racer: firstRacer,
+      first_racer_position: positions[firstRacer] ?? this.length,
+      last_racer: lastRacer,
+      last_racer_position: positions[lastRacer] ?? this.length,
+      ranking: [...ranking],
+      positions,
+    };
+  }
+
   private result(rounds: number, roundOrders: string[][]): RaceResult {
     const ranking = this.currentRanking();
     if (this.captureTrace) {
@@ -2035,6 +2071,7 @@ export class Race {
       action_order: roundOrders[0] ?? [],
       round_orders: roundOrders,
       first_rolls: {},
+      first_finish: this.firstFinishSnapshot,
     };
     if (this.captureTrace) {
       payload.timeline = this.timeline;
@@ -2116,9 +2153,11 @@ export function simulateSingle(
   onProgress?: ProgressCallback,
 ): SingleSimulationResult {
   const racerIds = [...match.racers];
-  const rankCounts: Record<string, Record<string, number>> = Object.fromEntries(
-    racerIds.map((racerId) => [racerId, {}]),
-  );
+  const rankCounts = emptyRankCounts(racerIds);
+  const firstFinishEvaluation: FirstFinishEvaluation = {
+    total_runs: 0,
+    tail_position_buckets: {},
+  };
   let roundsTotal = 0;
   const interval = progressEvery(runs);
   for (let runIndex = 0; runIndex < runs; runIndex += 1) {
@@ -2127,6 +2166,7 @@ export function simulateSingle(
     result.ranking.forEach((racerId, index) => {
       incrementCounter(rankCounts[racerId], index + 1);
     });
+    recordFirstFinishEvaluation(firstFinishEvaluation, result, racerIds);
     if (onProgress && ((runIndex + 1) % interval === 0 || runIndex + 1 === runs)) {
       onProgress(runIndex + 1, runs);
     }
@@ -2139,7 +2179,32 @@ export function simulateSingle(
     runs,
     rank_counts: rankCounts,
     avg_rounds: roundsTotal / runs,
+    first_finish_evaluation: firstFinishEvaluation,
   };
+}
+
+function recordFirstFinishEvaluation(
+  evaluation: FirstFinishEvaluation,
+  result: RaceResult,
+  racerIds: string[],
+): void {
+  const snapshot = result.first_finish;
+  if (!snapshot) {
+    return;
+  }
+  const tailPosition = Math.trunc(snapshot.last_racer_position);
+  const bucketKey = String(tailPosition);
+  const bucket =
+    evaluation.tail_position_buckets[bucketKey] ??
+    (evaluation.tail_position_buckets[bucketKey] = {
+      runs: 0,
+      rank_counts: emptyRankCounts(racerIds),
+    });
+  bucket.runs += 1;
+  evaluation.total_runs += 1;
+  result.ranking.forEach((racerId, index) => {
+    incrementCounter(bucket.rank_counts[racerId], index + 1);
+  });
 }
 
 export function simulateAggregate(
@@ -2330,6 +2395,27 @@ export function simulateManualRace(
   return simulateSingle(config, match, runs, new SeededRng(seed), onProgress);
 }
 
+function singleRaceTraceFromResult(
+  match: SingleRaceMatch,
+  result: RaceResult,
+  seed?: number | null,
+): SingleRaceTrace {
+  return {
+    type: "single_race_trace",
+    match_id: match.id,
+    match_name: match.name,
+    seed: seed ?? null,
+    racers: [...match.racers],
+    rounds: result.rounds,
+    ranking: result.ranking,
+    action_order: result.action_order,
+    round_orders: result.round_orders,
+    first_rolls: result.first_rolls,
+    first_finish: result.first_finish,
+    timeline: result.timeline ?? [],
+  };
+}
+
 export function traceManualRace(
   config: TuanziConfig,
   setup: ManualRaceSetup,
@@ -2346,19 +2432,7 @@ export function traceManualRace(
     true,
     match.initial_state,
   ).run();
-  return {
-    type: "single_race_trace",
-    match_id: match.id,
-    match_name: match.name,
-    seed: seed ?? null,
-    racers: [...match.racers],
-    rounds: result.rounds,
-    ranking: result.ranking,
-    action_order: result.action_order,
-    round_orders: result.round_orders,
-    first_rolls: result.first_rolls,
-    timeline: result.timeline ?? [],
-  };
+  return singleRaceTraceFromResult(match, result, seed);
 }
 
 export function traceManualRacePool(
@@ -2377,6 +2451,53 @@ export function traceManualRacePool(
     seeds.push(seedRng.randRange(1, 2_147_483_647));
   }
   return seeds.slice(0, count).map((itemSeed) => traceManualRace(config, setup, itemSeed));
+}
+
+export function traceManualRacePoolByFirstFinishTail(
+  config: TuanziConfig,
+  setup: ManualRaceSetup,
+  samples: number,
+  tailThreshold: number,
+  seed?: number | null,
+  maxAttempts = Math.max(200, samples * 250),
+): SingleRaceTrace[] {
+  const count = Math.max(1, samples);
+  const attemptsLimit = Math.max(count, maxAttempts);
+  validateConfig(config);
+  const match = buildManualMatch(config, setup);
+  validateInitialState(match, new Set(match.racers), Number(config.assumptions.track_length));
+  const seedRng = new SeededRng(seed);
+  const traces: SingleRaceTrace[] = [];
+  let attempts = 0;
+
+  while (traces.length < count && attempts < attemptsLimit) {
+    const itemSeed =
+      attempts === 0 && typeof seed === "number" && Number.isFinite(seed)
+        ? seed
+        : seedRng.randRange(1, 2_147_483_647);
+    attempts += 1;
+    const result = new Race(
+      config,
+      [...match.racers],
+      new SeededRng(itemSeed),
+      80,
+      false,
+      match.initial_state,
+    ).run();
+    if (matchesFirstFinishTailFilter(result.first_finish, tailThreshold)) {
+      const traceResult = new Race(
+        config,
+        [...match.racers],
+        new SeededRng(itemSeed),
+        80,
+        true,
+        match.initial_state,
+      ).run();
+      traces.push(singleRaceTraceFromResult(match, traceResult, itemSeed));
+    }
+  }
+
+  return traces;
 }
 
 export function simulateMatch(
@@ -2416,19 +2537,7 @@ export function traceSingleRace(
     true,
     match.initial_state,
   ).run();
-  return {
-    type: "single_race_trace",
-    match_id: match.id,
-    match_name: match.name,
-    seed: seed ?? null,
-    racers: [...match.racers],
-    rounds: result.rounds,
-    ranking: result.ranking,
-    action_order: result.action_order,
-    round_orders: result.round_orders,
-    first_rolls: result.first_rolls,
-    timeline: result.timeline ?? [],
-  };
+  return singleRaceTraceFromResult(match, result, seed);
 }
 
 export function traceSingleRacePool(

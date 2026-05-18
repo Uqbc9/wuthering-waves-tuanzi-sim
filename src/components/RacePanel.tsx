@@ -37,10 +37,12 @@ export default function RacePanel({
   playback,
   racers,
   language,
+  emptyMessage = null,
 }: {
   playback: RacePlaybackData | null;
   racers: RacerMap;
   language: Language;
+  emptyMessage?: string | null;
 }) {
   const copy = text[language];
   const [raceIndex, setRaceIndex] = useState(0);
@@ -74,6 +76,20 @@ export default function RacePanel({
   }, [playing, steps.length]);
 
   if (!playback || !race || !step) {
+    if (emptyMessage) {
+      return (
+        <section className="panel playback-panel" aria-live="polite">
+          <div className="panel-heading">
+            <div className="section-title">
+              <Play size={18} />
+              <h2>{copy.playback}</h2>
+            </div>
+          </div>
+          <p className="playback-empty">{emptyMessage}</p>
+        </section>
+      );
+    }
+
     return (
       <section className="panel playback-panel skeleton" aria-busy="true">
         <div className="panel-heading">

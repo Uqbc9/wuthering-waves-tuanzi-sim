@@ -8,6 +8,7 @@ import {
   simulateMatch,
   skillLabel,
   traceManualRace,
+  traceManualRacePoolByFirstFinishTail,
   traceSingleRace,
   validateConfig,
 } from "./sim";
@@ -45,6 +46,62 @@ describe("browser simulator", () => {
       const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
       expect(total).toBe(runs);
     }
+  });
+
+  it("tracks final ranks by tail position when the first racer reaches the finish", () => {
+    const runs = 40;
+    const result = simulateManualRace(
+      defaultConfig,
+      {
+        lap_mode: "first",
+        racers: ["denia", "phoebe", "siglica", "hiyuki"],
+        positions: {
+          denia: firstLapStart,
+          phoebe: firstLapStart,
+          siglica: firstLapStart,
+          hiyuki: firstLapStart,
+        },
+        stack_order: ["denia", "phoebe", "siglica", "hiyuki"],
+      },
+      runs,
+      20260510,
+    );
+
+    const buckets = Object.values(result.first_finish_evaluation.tail_position_buckets);
+    expect(result.first_finish_evaluation.total_runs).toBe(runs);
+    expect(buckets.reduce((total, bucket) => total + bucket.runs, 0)).toBe(runs);
+    for (const bucket of buckets) {
+      for (const racerId of ["denia", "phoebe", "siglica", "hiyuki"]) {
+        const countedRuns = Object.values(bucket.rank_counts[racerId]).reduce(
+          (total, count) => total + count,
+          0,
+        );
+        expect(countedRuns).toBe(bucket.runs);
+      }
+    }
+  });
+
+  it("can collect replay traces that match a first-finish tail filter", () => {
+    const setup: ManualRaceSetup = {
+      lap_mode: "first",
+      racers: ["denia", "phoebe", "siglica", "hiyuki"],
+      positions: {
+        denia: firstLapStart,
+        phoebe: firstLapStart,
+        siglica: firstLapStart,
+        hiyuki: firstLapStart,
+      },
+      stack_order: ["denia", "phoebe", "siglica", "hiyuki"],
+    };
+    const traces = traceManualRacePoolByFirstFinishTail(
+      defaultConfig,
+      setup,
+      3,
+      0,
+      20260510,
+    );
+    expect(traces).toHaveLength(3);
+    expect(traces.every((trace) => (trace.first_finish?.last_racer_position ?? 0) > 0)).toBe(true);
   });
 
   it("records a playable timeline for single race traces", () => {

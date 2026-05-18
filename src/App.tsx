@@ -9,6 +9,7 @@ import {
   RefreshCw,
   UsersRound,
 } from "lucide-react";
+import FilterEvaluationPanel from "./components/FilterEvaluationPanel";
 import ResultPanel from "./components/ResultPanel";
 import RacePanel from "./components/RacePanel";
 import { defaultConfig } from "./config";
@@ -25,6 +26,10 @@ import {
   type Language,
 } from "./i18n";
 import {
+  DEFAULT_FIRST_FINISH_TAIL_THRESHOLD,
+  parseFirstFinishTailThreshold,
+} from "./lib/filterEvaluation";
+import {
   DEFAULT_SIMULATION_RUNS,
   SIMULATION_RUN_STEP,
   clampSimulationRuns,
@@ -39,8 +44,23 @@ import {
 
 type WorkerResponse =
   | { id: string; type: "progress"; completedRuns: number; totalRuns: number }
-  | { id: string; type: "done"; result: SimulationResult; playback: RacePlaybackData }
+  | {
+      id: string;
+      type: "done";
+      result: SimulationResult;
+      playback: RacePlaybackData;
+      filteredPlayback: RacePlaybackData | null;
+    }
+  | { id: string; type: "filtered_playback_done"; filteredPlayback: RacePlaybackData | null }
   | { id: string; type: "error"; message: string };
+
+type PlaybackRequestConfig = {
+  manualSetup: ManualRaceSetup;
+  seed: number | null;
+  traceSamples: number;
+};
+
+const TRACE_SAMPLES = 8;
 
 const initialParams = new URLSearchParams(window.location.search);
 const allRacers = defaultConfig.racers;
@@ -141,13 +161,24 @@ export default function App() {
   const [language, setLanguage] = useState<Language>(() => safeInitialLanguage());
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [playback, setPlayback] = useState<RacePlaybackData | null>(null);
+  const [filteredPlayback, setFilteredPlayback] = useState<RacePlaybackData | null>(null);
+  const [filterTailThresholdInput, setFilterTailThresholdInput] = useState(
+    String(DEFAULT_FIRST_FINISH_TAIL_THRESHOLD),
+  );
+  const [filteredPlaybackThreshold, setFilteredPlaybackThreshold] = useState<number | null>(null);
+  const [showFilteredPlayback, setShowFilteredPlayback] = useState(false);
+  const [isFilteringPlayback, setIsFilteringPlayback] = useState(false);
+  const [lastPlaybackRequest, setLastPlaybackRequest] = useState<PlaybackRequestConfig | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const workerRef = useRef<Worker | null>(null);
+  const filteredPlaybackWorkerRef = useRef<Worker | null>(null);
   const activeRequestRef = useRef<string>("");
+  const activeFilteredPlaybackRequestRef = useRef<string>("");
   const copy = text[language];
+  const filterTailThreshold = parseFirstFinishTailThreshold(filterTailThresholdInput);
   const racers = useMemo(() => racerById(defaultConfig), []);
   const firstLapLocked = lapMode === "first";
   const canonicalSelectedRacers = useMemo(
@@ -250,6 +281,26 @@ export default function App() {
     });
   };
 
+  const updateFilterTailThreshold = (value: string) => {
+    filteredPlaybackWorkerRef.current?.terminate();
+    filteredPlaybackWorkerRef.current = null;
+    activeFilteredPlaybackRequestRef.current = "";
+    setFilterTailThresholdInput(value);
+    setFilteredPlaybackThreshold(null);
+    setFilteredPlayback(null);
+    setIsFilteringPlayback(false);
+  };
+
+  const updateShowFilteredPlayback = (value: boolean) => {
+    setShowFilteredPlayback(value);
+    if (!value) {
+      filteredPlaybackWorkerRef.current?.terminate();
+      filteredPlaybackWorkerRef.current = null;
+      activeFilteredPlaybackRequestRef.current = "";
+      setIsFilteringPlayback(false);
+    }
+  };
+
   const runSimulation = () => {
     if (orderedSelectedRacers.length === 0) {
       setError("请至少选择一个参赛团子");
@@ -260,8 +311,15 @@ export default function App() {
       setRuns(safeRuns);
     }
     workerRef.current?.terminate();
+    filteredPlaybackWorkerRef.current?.terminate();
     const id = requestId();
     activeRequestRef.current = id;
+    const requestSeed = seed.trim() ? Number(seed) : null;
+    const playbackRequest = {
+      manualSetup,
+      seed: requestSeed,
+      traceSamples: TRACE_SAMPLES,
+    };
     const worker = new Worker(new URL("./workers/simWorker.ts", import.meta.url), {
       type: "module",
     });
@@ -270,6 +328,9 @@ export default function App() {
     setProgress(0);
     setError(null);
     setCopied(false);
+    setFilteredPlayback(null);
+    setFilteredPlaybackThreshold(null);
+    setIsFilteringPlayback(false);
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const message = event.data;
@@ -281,6 +342,9 @@ export default function App() {
       } else if (message.type === "done") {
         setResult(message.result);
         setPlayback(message.playback);
+        setFilteredPlayback(message.filteredPlayback);
+        setFilteredPlaybackThreshold(filterTailThreshold);
+        setLastPlaybackRequest(playbackRequest);
         setProgress(1);
         setIsRunning(false);
         worker.terminate();
@@ -288,7 +352,7 @@ export default function App() {
         const url = new URL(window.location.href);
         writeShareParams(url);
         window.history.replaceState(null, "", url);
-      } else {
+      } else if (message.type === "error") {
         setError(message.message);
         setIsRunning(false);
         worker.terminate();
@@ -317,17 +381,103 @@ export default function App() {
     worker.postMessage({
       id,
       runs: safeRuns,
-      seed: seed.trim() ? Number(seed) : null,
-      traceSamples: 8,
+      seed: requestSeed,
+      traceSamples: TRACE_SAMPLES,
+      filterTailThreshold,
       manualSetup,
     });
   };
 
   useEffect(() => {
     runSimulation();
-    return () => workerRef.current?.terminate();
+    return () => {
+      workerRef.current?.terminate();
+      filteredPlaybackWorkerRef.current?.terminate();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (
+      !showFilteredPlayback ||
+      !lastPlaybackRequest ||
+      !result ||
+      result.type !== "single_race" ||
+      isRunning ||
+      isFilteringPlayback ||
+      filteredPlaybackThreshold === filterTailThreshold
+    ) {
+      return;
+    }
+
+    filteredPlaybackWorkerRef.current?.terminate();
+    const id = requestId();
+    const threshold = filterTailThreshold;
+    activeFilteredPlaybackRequestRef.current = id;
+    const worker = new Worker(new URL("./workers/simWorker.ts", import.meta.url), {
+      type: "module",
+    });
+    filteredPlaybackWorkerRef.current = worker;
+    setIsFilteringPlayback(true);
+
+    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      const message = event.data;
+      if (message.id !== activeFilteredPlaybackRequestRef.current) {
+        return;
+      }
+      if (message.type === "filtered_playback_done") {
+        setFilteredPlayback(message.filteredPlayback);
+        setFilteredPlaybackThreshold(threshold);
+        setIsFilteringPlayback(false);
+        worker.terminate();
+        filteredPlaybackWorkerRef.current = null;
+      } else if (message.type === "error") {
+        setError(message.message);
+        setFilteredPlayback(null);
+        setFilteredPlaybackThreshold(threshold);
+        setIsFilteringPlayback(false);
+        worker.terminate();
+        filteredPlaybackWorkerRef.current = null;
+      }
+    };
+    worker.onerror = (event) => {
+      if (id !== activeFilteredPlaybackRequestRef.current) {
+        return;
+      }
+      setError(event.message || "Worker 加载失败");
+      setFilteredPlayback(null);
+      setFilteredPlaybackThreshold(threshold);
+      setIsFilteringPlayback(false);
+      worker.terminate();
+      filteredPlaybackWorkerRef.current = null;
+    };
+    worker.onmessageerror = () => {
+      if (id !== activeFilteredPlaybackRequestRef.current) {
+        return;
+      }
+      setError("Worker 消息解析失败");
+      setFilteredPlayback(null);
+      setFilteredPlaybackThreshold(threshold);
+      setIsFilteringPlayback(false);
+      worker.terminate();
+      filteredPlaybackWorkerRef.current = null;
+    };
+
+    worker.postMessage({
+      id,
+      type: "filtered_playback",
+      ...lastPlaybackRequest,
+      filterTailThreshold: threshold,
+    });
+  }, [
+    filterTailThreshold,
+    filteredPlaybackThreshold,
+    isFilteringPlayback,
+    isRunning,
+    lastPlaybackRequest,
+    result,
+    showFilteredPlayback,
+  ]);
 
   const shareCurrent = async () => {
     const url = new URL(window.location.href);
@@ -341,6 +491,24 @@ export default function App() {
       window.setTimeout(() => setCopied(false), 1600);
     }
   };
+
+  const filteredPlaybackPending =
+    showFilteredPlayback &&
+    result?.type === "single_race" &&
+    filteredPlaybackThreshold !== filterTailThreshold;
+  const filteredPlaybackStatus = showFilteredPlayback
+    ? isFilteringPlayback || filteredPlaybackPending
+      ? copy.filteredPlaybackLoading
+      : filteredPlayback
+        ? copy.filteredPlaybackReady
+        : copy.filteredPlaybackEmpty
+    : null;
+  const displayedPlayback = showFilteredPlayback ? filteredPlayback : playback;
+  const playbackEmptyMessage = showFilteredPlayback
+    ? isFilteringPlayback || filteredPlaybackPending
+      ? copy.filteredPlaybackLoading
+      : copy.filteredPlaybackEmpty
+    : null;
 
   return (
     <main className="shell">
@@ -550,7 +718,22 @@ export default function App() {
 
         <section className="content-stack">
           <ResultPanel result={result} racers={racers} language={language} />
-          <RacePanel playback={playback} racers={racers} language={language} />
+          <FilterEvaluationPanel
+            result={result}
+            racers={racers}
+            language={language}
+            thresholdInput={filterTailThresholdInput}
+            onThresholdInputChange={updateFilterTailThreshold}
+            showFilteredPlayback={showFilteredPlayback}
+            onShowFilteredPlaybackChange={updateShowFilteredPlayback}
+            filteredPlaybackStatus={filteredPlaybackStatus}
+          />
+          <RacePanel
+            playback={displayedPlayback}
+            racers={racers}
+            language={language}
+            emptyMessage={playbackEmptyMessage}
+          />
         </section>
       </section>
     </main>

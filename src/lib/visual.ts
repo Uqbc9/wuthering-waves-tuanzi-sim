@@ -214,6 +214,7 @@ export function buildRacePlaybackData(
       round_orders: item.round_orders,
       round_summaries: buildRoundSummaries(item),
       first_rolls: item.first_rolls,
+      first_finish: item.first_finish,
       timeline: item.timeline,
     })),
   };

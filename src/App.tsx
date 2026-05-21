@@ -12,7 +12,7 @@ import {
 import FilterEvaluationPanel from "./components/FilterEvaluationPanel";
 import ResultPanel from "./components/ResultPanel";
 import RacePanel from "./components/RacePanel";
-import { defaultConfig } from "./config";
+import { defaultConfig, getDefaultTrackId, getTrackOptions } from "./config";
 import {
   formatGroupLabel,
   formatRacerCount,
@@ -22,6 +22,7 @@ import {
   racerDisplayName,
   skillDisplayText,
   text,
+  trackDisplayName,
   translateError,
   type Language,
 } from "./i18n";
@@ -55,6 +56,7 @@ type WorkerResponse =
   | { id: string; type: "error"; message: string };
 
 type PlaybackRequestConfig = {
+  trackId: string;
   manualSetup: ManualRaceSetup;
   seed: number | null;
   traceSamples: number;
@@ -65,6 +67,8 @@ const TRACE_SAMPLES = 8;
 const initialParams = new URLSearchParams(window.location.search);
 const allRacers = defaultConfig.racers;
 const allRacerIds = new Set(allRacers.map((racer) => racer.id));
+const trackOptions = getTrackOptions(defaultConfig);
+const defaultTrackId = getDefaultTrackId(defaultConfig);
 const trackLength = Number(defaultConfig.assumptions.track_length);
 const firstLapStartPosition = getFirstLapStartPosition(defaultConfig);
 const GITHUB_REPOSITORY_URL = "https://github.com/Uqbc9/wuthering-waves-tuanzi-sim";
@@ -120,6 +124,11 @@ function safeInitialLapMode(): ManualLapMode {
   return initialParams.get("lap") === "second" ? "second" : "first";
 }
 
+function safeInitialTrackId(): string {
+  const requested = initialParams.get("map");
+  return trackOptions.some((option) => option.id === requested) ? requested! : defaultTrackId;
+}
+
 function safeInitialStackOrder(selected: string[]): string[] {
   const requested =
     initialParams
@@ -155,6 +164,7 @@ export default function App() {
   const [selectedRacerIds, setSelectedRacerIds] = useState(() => safeInitialRacerIds());
   const [positions, setPositions] = useState(() => safeInitialPositions());
   const [lapMode, setLapMode] = useState<ManualLapMode>(() => safeInitialLapMode());
+  const [trackId, setTrackId] = useState(() => safeInitialTrackId());
   const [stackOrder, setStackOrder] = useState(() => safeInitialStackOrder(safeInitialRacerIds()));
   const [runs, setRuns] = useState(safeInitialRuns);
   const [seed, setSeed] = useState(safeInitialSeed);
@@ -180,6 +190,10 @@ export default function App() {
   const copy = text[language];
   const filterTailThreshold = parseFirstFinishTailThreshold(filterTailThresholdInput);
   const racers = useMemo(() => racerById(defaultConfig), []);
+  const selectedTrack = useMemo(
+    () => trackOptions.find((option) => option.id === trackId) ?? trackOptions[0],
+    [trackId],
+  );
   const firstLapLocked = lapMode === "first";
   const canonicalSelectedRacers = useMemo(
     () => allRacers.filter((racer) => selectedRacerIds.includes(racer.id)).map((racer) => racer.id),
@@ -233,6 +247,7 @@ export default function App() {
   const writeShareParams = (url: URL) => {
     url.searchParams.delete("match");
     url.searchParams.set("lang", language);
+    url.searchParams.set("map", trackId);
     url.searchParams.set("runs", String(clampSimulationRuns(runs)));
     url.searchParams.set("lap", lapMode);
     url.searchParams.set("racers", orderedSelectedRacers.join(","));
@@ -316,6 +331,7 @@ export default function App() {
     activeRequestRef.current = id;
     const requestSeed = seed.trim() ? Number(seed) : null;
     const playbackRequest = {
+      trackId,
       manualSetup,
       seed: requestSeed,
       traceSamples: TRACE_SAMPLES,
@@ -384,6 +400,7 @@ export default function App() {
       seed: requestSeed,
       traceSamples: TRACE_SAMPLES,
       filterTailThreshold,
+      trackId,
       manualSetup,
     });
   };
@@ -528,6 +545,9 @@ export default function App() {
               {copy.racersSuffix}
             </span>
             <span>
+              <b>{trackDisplayName(selectedTrack?.id, selectedTrack?.name ?? "", language)}</b>
+            </span>
+            <span>
               {trackLength} {copy.trackSuffix}
             </span>
           </div>
@@ -584,6 +604,17 @@ export default function App() {
               {copy.secondLap}
             </button>
           </div>
+
+          <label className="field">
+            <span>{copy.map}</span>
+            <select value={trackId} onChange={(event) => setTrackId(event.target.value)}>
+              {trackOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {trackDisplayName(option.id, option.name, language)}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <div className="racer-picker" aria-label={copy.racerPicker}>
             {allRacers.map((racer) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultConfig } from "../config";
+import { configWithTrack, defaultConfig, getTrackOptions } from "../config";
 import { BUDDAWANG_ID } from "../types";
 import {
   buildManualMatch,
@@ -31,6 +31,43 @@ function setRacerSkill(config: TuanziConfig, racerId: string, skill: TuanziConfi
 describe("browser simulator", () => {
   it("validates the bundled championship config", () => {
     expect(() => validateConfig(defaultConfig)).not.toThrow();
+  });
+
+  it("can switch to the bundled second map for simulation", () => {
+    const config = configWithTrack(defaultConfig, "map_2");
+    const mechanismByPosition = Object.fromEntries(
+      config.track.sequence.map((marker, position) => [
+        position,
+        typeof marker === "string" ? (config.track.mechanisms[marker]?.id ?? null) : null,
+      ]),
+    );
+
+    expect(getTrackOptions(defaultConfig).map((track) => track.id)).toContain("map_2");
+    expect(mechanismByPosition).toMatchObject({
+      4: "boost",
+      6: "rift",
+      10: "boost",
+      14: "rift",
+      16: "hindrance",
+      20: "boost",
+      23: "rift",
+      26: "hindrance",
+      30: "hindrance",
+    });
+    expect(() => validateConfig(config)).not.toThrow();
+    expect(
+      simulateManualRace(
+        config,
+        {
+          lap_mode: "first",
+          racers: ["denia", "phoebe"],
+          positions: { denia: firstLapStart, phoebe: firstLapStart },
+          stack_order: ["denia", "phoebe"],
+        },
+        5,
+        20260521,
+      ).runs,
+    ).toBe(5);
   });
 
   it("keeps seeded browser simulations reproducible", () => {

@@ -41,6 +41,7 @@ export function buildTrackLayout(config: TuanziConfig): TrackLayout {
   const centerY = (rows - 1) / 2;
   const radius = 5.55;
   const length = sequence.length - 1;
+  const startFinishLabel = `0/${length}`;
   const cells = sequence.map((marker, position) => {
     const isStartFinish = position === 0 || position === length;
     const visualPosition = position === length ? 0 : position;
@@ -60,10 +61,10 @@ export function buildTrackLayout(config: TuanziConfig): TrackLayout {
 
     return {
       position,
-      display_position: position === 0 ? "0/32" : String(position),
+      display_position: isStartFinish ? startFinishLabel : String(position),
       x,
       y,
-      label: isStartFinish ? "0/32" : mechanismEffect ?? String(position),
+      label: isStartFinish ? startFinishLabel : mechanismEffect ?? String(position),
       marker,
       mechanism_id: mechanismId,
       mechanism_name: mechanism?.name ?? null,

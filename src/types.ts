@@ -18,6 +18,18 @@ export type MechanismConfig = {
   delta?: number;
 };
 
+export type TrackConfig = {
+  id?: string;
+  name?: string;
+  sequence: Array<string | number>;
+  mechanisms: Record<string, MechanismConfig>;
+};
+
+export type TrackOption = {
+  id: string;
+  name: string;
+};
+
 export type InitialStateConfig = {
   label?: string;
   finish_rule?: string;
@@ -78,10 +90,8 @@ export type TuanziConfig = {
     budawang_starts_on_round: number;
     aggregate_rank_points: number[];
   };
-  track: {
-    sequence: Array<string | number>;
-    mechanisms: Record<string, MechanismConfig>;
-  };
+  track: TrackConfig;
+  tracks?: TrackConfig[];
   racers: RacerConfig[];
   special_units?: {
     budawang?: {

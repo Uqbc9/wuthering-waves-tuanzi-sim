@@ -1,4 +1,4 @@
-import { defaultConfig } from "../config";
+import { configWithTrack, defaultConfig } from "../config";
 import { DEFAULT_FIRST_FINISH_TAIL_THRESHOLD } from "../lib/filterEvaluation";
 import { clampSimulationRuns } from "../lib/runLimits";
 import {
@@ -12,6 +12,7 @@ import type { ManualRaceSetup, RacePlaybackData, SimulationResult } from "../typ
 type SimulateRequest = {
   id: string;
   type?: "simulate";
+  trackId?: string;
   runs: number;
   seed: number | null;
   traceSamples: number;
@@ -22,6 +23,7 @@ type SimulateRequest = {
 type FilterPlaybackRequest = {
   id: string;
   type: "filtered_playback";
+  trackId?: string;
   seed: number | null;
   traceSamples: number;
   filterTailThreshold?: number;
@@ -47,29 +49,32 @@ const post = (message: WorkerResponse) => {
 };
 
 function buildFilteredPlayback(
+  trackId: string | null | undefined,
   manualSetup: ManualRaceSetup,
   traceSamples: number,
   seed: number | null,
   filterTailThreshold = DEFAULT_FIRST_FINISH_TAIL_THRESHOLD,
 ): RacePlaybackData | null {
+  const config = configWithTrack(defaultConfig, trackId);
   const traces = traceManualRacePoolByFirstFinishTail(
-    defaultConfig,
+    config,
     manualSetup,
     traceSamples,
     filterTailThreshold,
     seed,
   );
-  return traces.length > 0 ? buildRacePlaybackData(defaultConfig, traces[0], traces) : null;
+  return traces.length > 0 ? buildRacePlaybackData(config, traces[0], traces) : null;
 }
 
 self.onmessage = (event: MessageEvent<WorkerRequest>) => {
-  const { id, manualSetup, seed, traceSamples } = event.data;
+  const { id, manualSetup, seed, traceSamples, trackId } = event.data;
   try {
     if (event.data.type === "filtered_playback") {
       post({
         id,
         type: "filtered_playback_done",
         filteredPlayback: buildFilteredPlayback(
+          trackId,
           manualSetup,
           traceSamples,
           seed,
@@ -81,12 +86,14 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
 
     const { runs } = event.data;
     const safeRuns = clampSimulationRuns(runs);
-    const result = simulateManualRace(defaultConfig, manualSetup, safeRuns, seed, (completedRuns, totalRuns) => {
+    const config = configWithTrack(defaultConfig, trackId);
+    const result = simulateManualRace(config, manualSetup, safeRuns, seed, (completedRuns, totalRuns) => {
       post({ id, type: "progress", completedRuns, totalRuns });
     });
-    const traces = traceManualRacePool(defaultConfig, manualSetup, traceSamples, seed);
-    const playback = buildRacePlaybackData(defaultConfig, traces[0], traces);
+    const traces = traceManualRacePool(config, manualSetup, traceSamples, seed);
+    const playback = buildRacePlaybackData(config, traces[0], traces);
     const filteredPlayback = buildFilteredPlayback(
+      trackId,
       manualSetup,
       traceSamples,
       seed,

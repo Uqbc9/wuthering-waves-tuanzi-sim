@@ -35,6 +35,8 @@
     "aggregate_tie_breakers": ["best_single_rank", "rank_sum", "random"]
   },
   "track": {
+    "id": "map_1",
+    "name": "地图一",
     "sequence": [
       "起点/终点",
       1,
@@ -87,6 +89,63 @@
       }
     }
   },
+  "tracks": [
+    {
+      "id": "map_2",
+      "name": "地图二",
+      "sequence": [
+        "起点/终点",
+        1,
+        2,
+        3,
+        "a",
+        5,
+        "c",
+        7,
+        8,
+        9,
+        "a",
+        11,
+        12,
+        13,
+        "c",
+        15,
+        "b",
+        17,
+        18,
+        19,
+        "a",
+        21,
+        22,
+        "c",
+        24,
+        25,
+        "b",
+        27,
+        28,
+        29,
+        "b",
+        31,
+        "起点/终点"
+      ],
+      "mechanisms": {
+        "a": {
+          "id": "boost",
+          "name": "推进装置",
+          "delta": 1
+        },
+        "b": {
+          "id": "hindrance",
+          "name": "阻遏装置",
+          "delta": -1
+        },
+        "c": {
+          "id": "rift",
+          "name": "时空裂隙"
+        }
+      }
+    }
+  ],
   "racers": [
     {
       "id": "lu_hesi",

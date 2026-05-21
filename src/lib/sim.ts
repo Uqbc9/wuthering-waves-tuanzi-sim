@@ -15,6 +15,7 @@ import {
   type SkillConfig,
   type SimulationResult,
   type TimelineStep,
+  type TrackConfig,
   type TuanziConfig,
 } from "../types";
 import { matchesFirstFinishTailFilter } from "./filterEvaluation";
@@ -101,6 +102,25 @@ export function matchById(config: TuanziConfig, matchId: string): MatchConfig {
   return match;
 }
 
+function validateTrack(track: TrackConfig, length: number, label: string): void {
+  if (track.sequence.length !== length + 1) {
+    throw new Error(
+      `${label} sequence has ${track.sequence.length} entries, expected ${length + 1}`,
+    );
+  }
+
+  track.sequence.forEach((item, position) => {
+    if (
+      typeof item === "string" &&
+      position !== 0 &&
+      position !== length &&
+      !track.mechanisms[item]
+    ) {
+      throw new Error(`${label} references unknown mechanism marker ${item} at ${position}`);
+    }
+  });
+}
+
 export function validateConfig(config: TuanziConfig): void {
   const required: Array<keyof TuanziConfig> = [
     "metadata",
@@ -116,12 +136,18 @@ export function validateConfig(config: TuanziConfig): void {
   }
 
   const length = Number(config.assumptions.track_length);
-  if (config.track.sequence.length !== length + 1) {
-    throw new Error(
-      `Track sequence has ${config.track.sequence.length} entries, expected ${
-        length + 1
-      }`,
-    );
+  validateTrack(config.track, length, "Track");
+
+  const trackIds = new Set<string>();
+  for (const [index, track] of [config.track, ...(config.tracks ?? [])].entries()) {
+    validateTrack(track, length, `Track ${track.id ?? index + 1}`);
+    if (!track.id) {
+      continue;
+    }
+    if (trackIds.has(track.id)) {
+      throw new Error(`Duplicate track id in config: ${track.id}`);
+    }
+    trackIds.add(track.id);
   }
 
   const racerIds = new Set(config.racers.map((item) => item.id));

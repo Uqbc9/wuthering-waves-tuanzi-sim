@@ -38,6 +38,7 @@ const zhText = {
   groupFirst: "小组第一",
   languageSwitch: "语言切换",
   lapMode: "圈数模式",
+  map: "地图",
   manualSetup: "手动设定",
   moveDown: "同格顺序下移",
   moveUp: "同格顺序上移",
@@ -114,6 +115,7 @@ const enText: TextMap = {
   groupFirst: "Group first",
   languageSwitch: "Language switch",
   lapMode: "Lap mode",
+  map: "Map",
   manualSetup: "Manual setup",
   moveDown: "Move down in same-tile order",
   moveUp: "Move up in same-tile order",
@@ -199,6 +201,11 @@ const matchNames: Record<string, Record<Language, string>> = {
   a_group_upper: { zh: "A组小组赛 05.09 上半场", en: "Group A qualifier 05.09, first half" },
   manual_race: { zh: "手动赛局", en: "Manual race" },
   template_all_18: { zh: "18名团子模板赛", en: "18-racer template race" },
+};
+
+const trackNames: Record<string, Record<Language, string>> = {
+  map_1: { zh: "地图一", en: "Map 1" },
+  map_2: { zh: "地图二", en: "Map 2" },
 };
 
 const eventTypeLabels: Record<string, Record<Language, string>> = {
@@ -367,6 +374,17 @@ export function matchDisplayName(
     return matchNames[matchId][language];
   }
   return language === "zh" ? fallback : translateKnownNames(fallback, language);
+}
+
+export function trackDisplayName(
+  trackId: string | undefined,
+  fallback: string,
+  language: Language,
+): string {
+  if (trackId && trackNames[trackId]) {
+    return trackNames[trackId][language];
+  }
+  return fallback;
 }
 
 export function eventTypeDisplayName(eventType: string, language: Language): string {
